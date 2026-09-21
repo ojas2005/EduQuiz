@@ -48,3 +48,14 @@ class Attempt(Base):
     mission_index: Mapped[int]
     result: Mapped[dict] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+class Audit(Base):
+    __tablename__ = 'audit_logs'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    actor_id: Mapped[str] = mapped_column(String(36), index=True)
+    action: Mapped[str]
+    target_id: Mapped[str | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+engine = create_engine(settings.database_url, pool_pre_ping=True)
+SessionLocal = sessionmaker(engine, expire_on_commit=False)
+def db_session():
+    with SessionLocal() as db: yield db
