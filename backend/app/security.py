@@ -21,3 +21,13 @@ def digest(value): return hashlib.sha256(value.encode()).hexdigest()
 def audit(db, actor, action, target=None):
     from .models import Audit
     db.add(Audit(actor_id=actor, action=action, target_id=target))
+def require_origin(request: Request):
+    if request.headers.get('origin') != settings.origin:
+        raise HTTPException(403, 'Untrusted request origin')
+def rate_limit(key, limit, seconds=60):
+    try:
+        count = redis.eval("local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('EXPIRE',KEYS[1],ARGV[1]) end; return n", 1, key, seconds)
+    except Exception:
+        raise HTTPException(503, 'Rate limiter unavailable; try again shortly')
+    if count > limit:
+        raise HTTPException(429, 'Too many requests', headers={'Retry-After': str(seconds)})
