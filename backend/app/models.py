@@ -30,3 +30,13 @@ class Credential(Base):
     provider: Mapped[str]
     model: Mapped[str]
     ciphertext: Mapped[str]
+class Course(Base):
+    __tablename__ = 'courses'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
+    topic: Mapped[str]
+    practice: Mapped[bool] = mapped_column(default=False)
+    missions: Mapped[list] = mapped_column(JSON)
+    current: Mapped[int] = mapped_column(Integer, default=0)
+    pending_attempt: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
