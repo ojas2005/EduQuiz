@@ -40,3 +40,11 @@ class Course(Base):
     current: Mapped[int] = mapped_column(Integer, default=0)
     pending_attempt: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+class Attempt(Base):
+    __tablename__ = 'attempts'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
+    course_id: Mapped[str] = mapped_column(ForeignKey('courses.id'))
+    mission_index: Mapped[int]
+    result: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
