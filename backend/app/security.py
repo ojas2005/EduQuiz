@@ -53,3 +53,6 @@ def current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer), db
         return user
     except (jwt.InvalidTokenError, ValueError):
         raise HTTPException(401, 'Session expired or revoked')
+def admin(user: User = Depends(current_user)):
+    if user.role != 'admin': raise HTTPException(403, 'Administrator access required')
+    return user
