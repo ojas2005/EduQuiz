@@ -73,3 +73,28 @@ def signup(data: Signup, request: Request, response: Response, db: DB = Depends(
         db.rollback(); raise HTTPException(409, 'Unable to create account with these details')
     result = issue(db, user, response); audit(db,user.id,'signup'); db.commit()
     return result
+@app.post('/api/auth/login', dependencies=[Depends(require_origin)])
+def login(data: Login, request: Request, response: Response, db: DB = Depends(db_session)):
+    auth_rate(request)
+    rate_limit('login:'+digest(str(data.email).lower()), 10, 300)
+    user = db.scalar(select(User).where(User.email==str(data.email).lower()))
+    valid = passwords.verify(data.password, user.password_hash if user else DUMMY_HASH)
+    if not user or not valid or user.suspended: raise HTTPException(401, 'Invalid credentials or unavailable account')
+    result=issue(db,user,response); audit(db,user.id,'login'); db.commit(); return result
+@app.post('/api/auth/refresh', dependencies=[Depends(require_origin)])
+def refresh(request: Request, response: Response, db: DB = Depends(db_session)):
+    auth_rate(request)
+    raw=request.cookies.get('refresh_token','')
+    parts=raw.split('.',1)
+    if len(parts)!=2: raise HTTPException(401,'Sign in required')
+    sid, secret=parts
+    session=db.scalar(select(Session).where(Session.id==sid).with_for_update())
+    hashed=digest(secret)
+    if session and hashed in session.used_hashes:
+        session.revoked=True; audit(db,session.user_id,'refresh_reuse',sid); db.commit()
+        raise HTTPException(401,'Session revoked; sign in again')
+    if not session or session.revoked or session.expires_at<=now() or not __import__('secrets').compare_digest(session.refresh_hash,hashed):
+        raise HTTPException(401,'Sign in required')
+    user=db.get(User,session.user_id)
+    if not user or user.suspended: raise HTTPException(401,'Account unavailable')
+    result=issue(db,user,response,session); db.commit(); return result
