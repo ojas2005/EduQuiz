@@ -61,3 +61,15 @@ def health(db: DB = Depends(db_session)):
     db.execute(text('SELECT 1')); redis.ping()
     return {'status':'ok', 'demo_mode':settings.demo_mode}
 
+def auth_rate(request):
+    rate_limit(f'auth:{request.client.host}', 20, 300)
+@app.post('/api/auth/signup', dependencies=[Depends(require_origin)])
+def signup(data: Signup, request: Request, response: Response, db: DB = Depends(db_session)):
+    auth_rate(request)
+    user = User(email=str(data.email).lower(), name=data.name.strip() or 'Learner', password_hash=passwords.hash(data.password))
+    db.add(user)
+    try: db.flush()
+    except IntegrityError:
+        db.rollback(); raise HTTPException(409, 'Unable to create account with these details')
+    result = issue(db, user, response); audit(db,user.id,'signup'); db.commit()
+    return result
