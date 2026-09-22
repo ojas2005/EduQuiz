@@ -43,3 +43,13 @@ def issue(db, user, response, session=None):
     response.set_cookie('refresh_token', f'{session.id}.{refresh}', httponly=True, secure=settings.secure_cookies, samesite='strict', path='/api/auth', max_age=max(0, int((session.expires_at-now()).total_seconds())))
     return {'access_token': token, 'user': public_user(user)}
 def public_user(u): return {'id':u.id,'name':u.name,'email':u.email,'role':u.role,'suspended':u.suspended}
+def current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer), db: DB = Depends(db_session)):
+    try:
+        if credentials is None: raise ValueError()
+        claims = jwt.decode(credentials.credentials, settings.jwt_secret, algorithms=['HS256'], audience='eduquiz-web', issuer='eduquiz', options={'require':['sub','sid','exp','iat']})
+        session = db.get(Session, claims['sid'])
+        user = db.get(User, claims['sub'])
+        if not session or session.revoked or session.user_id != claims['sub'] or session.expires_at <= now() or not user or user.suspended: raise ValueError()
+        return user
+    except (jwt.InvalidTokenError, ValueError):
+        raise HTTPException(401, 'Session expired or revoked')
