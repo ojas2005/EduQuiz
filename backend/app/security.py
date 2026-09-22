@@ -42,3 +42,4 @@ def issue(db, user, response, session=None):
     token = jwt.encode({'sub':user.id,'sid':session.id,'iss':'eduquiz','aud':'eduquiz-web','iat':now(),'exp':now()+timedelta(minutes=15)}, settings.jwt_secret, algorithm='HS256')
     response.set_cookie('refresh_token', f'{session.id}.{refresh}', httponly=True, secure=settings.secure_cookies, samesite='strict', path='/api/auth', max_age=max(0, int((session.expires_at-now()).total_seconds())))
     return {'access_token': token, 'user': public_user(user)}
+def public_user(u): return {'id':u.id,'name':u.name,'email':u.email,'role':u.role,'suspended':u.suspended}
