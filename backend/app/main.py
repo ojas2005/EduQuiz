@@ -123,3 +123,55 @@ def delete_key(user=Depends(current_user), db:DB=Depends(db_session)):
     if row: db.delete(row)
     audit(db,user.id,'credential_deleted'); db.commit(); return {'ok':True}
 
+async def generate(db,user,topic,practice=False,focus=None):
+    rate_limit('generation:'+user.id,5,3600)
+    key=db.get(Credential,user.id)
+    if key is None:
+        if settings.demo_mode and topic.lower()=='sentences':
+            missions=demo_curriculum()
+            if focus:
+                matching=[m for m in missions if m['questions'][0]['skill'] in focus]
+                mission=dict(matching[0]); mission['title']='Review: '+', '.join(focus)
+                mission['lesson']='\n\n'.join(m['lesson'] for m in matching)
+                mission['objective']='Practice only: '+', '.join(focus)
+                mission['tasks']=['Write an example for each focus skill: '+', '.join(focus), 'Explain how your examples demonstrate these focus skills.']
+                mission['questions']=[q for m in missions for q in m['questions'] if q['skill'] in focus][:8]
+                while len(mission['questions'])<3: mission['questions']+=mission['questions'][:1]
+                return [mission]
+            return missions[:1] if practice else missions
+        raise HTTPException(400,'Add your provider API key in Settings. Local demo supports “sentences” only.')
+    try:
+        graph=build_graph(key.provider,key.model,cipher.decrypt(key.ciphertext.encode()).decode())
+        result=await asyncio.wait_for(graph.ainvoke({'topic':topic,'focus':focus or [],'practice':practice}),timeout=90)
+        return result['curriculum']['missions']
+    except Exception:
+        raise HTTPException(502,'Generation failed. Check your provider, model access, and quota, then retry.')
+
+def owned_course(db,user,cid,lock=False):
+    query=select(Course).where(Course.id==cid,Course.user_id==user.id)
+    if lock: query=query.with_for_update()
+    course=db.scalar(query)
+    if not course: raise HTTPException(404,'Learning path not found')
+    return course
+
+def public_course(c):
+    # Answer keys/explanations never leave the server before submission.
+    missions=[]
+    for i,m in enumerate(c.missions):
+        public={'title':m['title'],'objective':m['objective']}
+        if i==c.current:
+            public.update({'lesson':m['lesson'],'tasks':m['tasks'],'questions':[{'prompt':q['prompt'],'options':q['options']} for q in m['questions']]})
+        missions.append(public)
+    return {'id':c.id,'topic':c.topic,'practice':c.practice,'current':c.current,'missions':missions,'pending_attempt':c.pending_attempt,'complete':c.current>=len(c.missions)}
+@app.post('/api/courses')
+async def create_course(data:TopicInput,user=Depends(current_user),db:DB=Depends(db_session)):
+    missions=await generate(db,user,data.topic.strip(),data.practice)
+    course=Course(user_id=user.id,topic=data.topic.strip(),practice=data.practice,missions=missions)
+    db.add(course); db.flush(); audit(db,user.id,'practice_created' if data.practice else 'course_created',course.id); db.commit()
+    return public_course(course)
+@app.get('/api/courses')
+def courses(user=Depends(current_user),db:DB=Depends(db_session)):
+    return [public_course(c) for c in db.scalars(select(Course).where(Course.user_id==user.id).order_by(Course.created_at.desc()).limit(100))]
+@app.get('/api/courses/{cid}')
+def course(cid:str,user=Depends(current_user),db:DB=Depends(db_session)):
+    return public_course(owned_course(db,user,cid))
