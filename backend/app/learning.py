@@ -43,3 +43,14 @@ def build_graph(provider, model, api_key):
     graph.add_edge('generate_validated_curriculum', END)
     return graph.compile()
 
+def grade(questions, answers):
+    skills = {}
+    feedback = []
+    for question, answer in zip(questions, answers, strict=True):
+        correct = question['correct'] == answer
+        bucket = skills.setdefault(question['skill'], [0, 0])
+        bucket[0] += int(correct); bucket[1] += 1
+        feedback.append({'correct': correct, 'explanation': question['explanation'], 'answer': question['options'][question['correct']]})
+    score = round(sum(x['correct'] for x in feedback) / len(questions) * 100)
+    return {'score': score, 'passed': score >= 80, 'strengths': [s for s, (c,t) in skills.items() if c/t >= .8], 'weaknesses': [s for s, (c,t) in skills.items() if c/t < .8], 'skills': skills, 'feedback': feedback}
+
