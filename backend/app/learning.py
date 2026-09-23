@@ -54,3 +54,14 @@ def grade(questions, answers):
     score = round(sum(x['correct'] for x in feedback) / len(questions) * 100)
     return {'score': score, 'passed': score >= 80, 'strengths': [s for s, (c,t) in skills.items() if c/t >= .8], 'weaknesses': [s for s, (c,t) in skills.items() if c/t < .8], 'skills': skills, 'feedback': feedback}
 
+def demo_curriculum():
+    lessons = [
+        ('Subjects and predicates', 'A sentence expresses a complete thought. The subject tells us who or what the sentence is about. The predicate tells us what the subject does or is. In “The bird sings”, “The bird” is the subject and “sings” is the predicate.', 'Which part is the subject in “The dog runs”?', ['The dog','runs','dog runs','The'], 0, 'Sentence parts'),
+        ('Complete thoughts', 'A complete sentence needs a subject and a predicate and must express a complete thought. “Because it rained” leaves a question unanswered, so it is a fragment. “We stayed inside because it rained” expresses a complete thought.', 'Which is a complete sentence?', ['Because it rained','Running quickly','We stayed inside.','The big house'], 2, 'Complete sentences'),
+        ('Joining ideas', 'A compound sentence joins two independent clauses using a coordinating conjunction such as and, but, or so. Use a comma before the conjunction: “I was tired, but I finished.” Each clause can stand alone as a sentence.', 'Which word shows contrast?', ['and','so','or','but'], 3, 'Joining clauses')]
+    missions=[]
+    for title, lesson, prompt, options, correct, skill in lessons:
+        questions=[{'prompt':prompt,'options':options,'correct':correct,'skill':skill,'explanation':lesson}]
+        questions += [{'prompt':'What does a subject tell us?', 'options':['When only','Who or what','Punctuation','Sentence length'],'correct':1,'skill':'Sentence parts','explanation':'The subject names who or what the sentence is about.'}, {'prompt':'Which sentence joins two complete ideas?', 'options':['The red ball','Because I ran','I ran, and she walked.','Running in rain'],'correct':2,'skill':'Joining clauses','explanation':'Both “I ran” and “she walked” can stand alone.'}]
+        missions.append({'title':title,'objective':f'Understand {title.lower()}.','lesson':lesson,'tasks':['Write two examples in your own words.','Explain your examples aloud and identify the sentence parts.'],'questions':questions})
+    return missions
