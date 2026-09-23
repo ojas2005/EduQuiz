@@ -98,3 +98,11 @@ def refresh(request: Request, response: Response, db: DB = Depends(db_session)):
     user=db.get(User,session.user_id)
     if not user or user.suspended: raise HTTPException(401,'Account unavailable')
     result=issue(db,user,response,session); db.commit(); return result
+@app.post('/api/auth/logout', dependencies=[Depends(require_origin)])
+def logout(request: Request, response: Response, user=Depends(current_user), db: DB=Depends(db_session)):
+    # Revoke all sessions: explicit, safe logout behavior across devices.
+    for session in db.scalars(select(Session).where(Session.user_id==user.id)): session.revoked=True
+    audit(db,user.id,'logout_all'); db.commit()
+    response.delete_cookie('refresh_token',path='/api/auth'); return {'ok':True}
+@app.get('/api/me')
+def me(user=Depends(current_user)): return public_user(user)
