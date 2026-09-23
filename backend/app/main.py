@@ -106,3 +106,20 @@ def logout(request: Request, response: Response, user=Depends(current_user), db:
     response.delete_cookie('refresh_token',path='/api/auth'); return {'ok':True}
 @app.get('/api/me')
 def me(user=Depends(current_user)): return public_user(user)
+@app.put('/api/credential')
+def save_key(data:KeyInput, user=Depends(current_user), db:DB=Depends(db_session)):
+    rate_limit('key:'+user.id,10)
+    row=db.get(Credential,user.id)
+    if not row: row=Credential(user_id=user.id); db.add(row)
+    row.provider=data.provider; row.model=data.model; row.ciphertext=cipher.encrypt(data.api_key.encode()).decode()
+    audit(db,user.id,'credential_updated'); db.commit(); return {'provider':row.provider,'model':row.model}
+@app.get('/api/credential')
+def get_key(user=Depends(current_user),db:DB=Depends(db_session)):
+    row=db.get(Credential,user.id)
+    return {'configured':bool(row),'provider':row.provider if row else None,'model':row.model if row else None,'demo_mode':settings.demo_mode}
+@app.delete('/api/credential')
+def delete_key(user=Depends(current_user), db:DB=Depends(db_session)):
+    row=db.get(Credential,user.id)
+    if row: db.delete(row)
+    audit(db,user.id,'credential_deleted'); db.commit(); return {'ok':True}
+
