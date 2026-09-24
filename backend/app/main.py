@@ -207,3 +207,11 @@ async def decision(cid:str,data:Decision,user=Depends(current_user),db:DB=Depend
     if remediation: c.missions=c.missions[:c.current]+remediation+c.missions[c.current:]
     c.pending_attempt=None; audit(db,user.id,'remediation_accepted' if data.remediate else 'remediation_declined',cid); db.commit()
     return public_course(c)
+@app.get('/api/report')
+def report(user=Depends(current_user),db:DB=Depends(db_session)):
+    attempts=list(db.scalars(select(Attempt).where(Attempt.user_id==user.id).order_by(Attempt.created_at)))
+    totals={}
+    for a in attempts:
+        for skill,(correct,total) in a.result['skills'].items():
+            item=totals.setdefault(skill,[0,0]); item[0]+=correct; item[1]+=total
+    return {'attempts':[{'id':a.id,'course_id':a.course_id,'date':a.created_at.isoformat(),**a.result} for a in attempts], 'skills':[{'name':s,'score':round(c/t*100),'evidence':t} for s,(c,t) in totals.items()]}
