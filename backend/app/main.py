@@ -215,3 +215,12 @@ def report(user=Depends(current_user),db:DB=Depends(db_session)):
         for skill,(correct,total) in a.result['skills'].items():
             item=totals.setdefault(skill,[0,0]); item[0]+=correct; item[1]+=total
     return {'attempts':[{'id':a.id,'course_id':a.course_id,'date':a.created_at.isoformat(),**a.result} for a in attempts], 'skills':[{'name':s,'score':round(c/t*100),'evidence':t} for s,(c,t) in totals.items()]}
+@app.post('/api/report/export')
+def export(user=Depends(current_user),db:DB=Depends(db_session)):
+    rate_limit('export:'+user.id,5,3600)
+    data=report(user,db)
+    key=f'reports/{user.id}/{__import__("uuid").uuid4()}.json'
+    try: blob_container().upload_blob(name=key,data=json.dumps(data).encode(),overwrite=False)
+    except Exception: raise HTTPException(503,'Report storage unavailable')
+    audit(db,user.id,'report_exported'); db.commit()
+    return Response(json.dumps(data),media_type='application/json',headers={'Content-Disposition':'attachment; filename="eduquiz-report.json"'})
