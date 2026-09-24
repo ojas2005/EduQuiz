@@ -175,3 +175,21 @@ def courses(user=Depends(current_user),db:DB=Depends(db_session)):
 @app.get('/api/courses/{cid}')
 def course(cid:str,user=Depends(current_user),db:DB=Depends(db_session)):
     return public_course(owned_course(db,user,cid))
+@app.post('/api/courses/{cid}/submit')
+def submit(cid:str,data:Submission,user=Depends(current_user),db:DB=Depends(db_session)):
+    rate_limit('quiz:'+user.id,30)
+    c=owned_course(db,user,cid,True)
+    if c.pending_attempt: raise HTTPException(409,'Choose your next step before continuing')
+    if c.current!=data.mission_index or c.current>=len(c.missions): raise HTTPException(409,'Mission changed; reload your path')
+    if not data.skip and not data.tasks_completed and not c.practice: raise HTTPException(400,'Complete the mission tasks first')
+    questions=c.missions[c.current]['questions']
+    if len(data.answers)!=len(questions) or any(a not in range(4) for a in data.answers): raise HTTPException(422,'Answer every question with a valid option')
+    result=grade(questions,data.answers)
+    result.update({'skip':data.skip,'can_continue':not data.skip or result['passed']})
+    attempt=Attempt(user_id=user.id,course_id=c.id,mission_index=c.current,result=result)
+    db.add(attempt); db.flush()
+    if result['can_continue']:
+        if result['weaknesses'] and not c.practice: c.pending_attempt=attempt.id
+        else: c.current+=1
+    audit(db,user.id,'quiz_submitted',c.id); db.commit()
+    return {**result,'attempt_id':attempt.id,'course':public_course(c)}
