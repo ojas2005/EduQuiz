@@ -193,3 +193,17 @@ def submit(cid:str,data:Submission,user=Depends(current_user),db:DB=Depends(db_s
         else: c.current+=1
     audit(db,user.id,'quiz_submitted',c.id); db.commit()
     return {**result,'attempt_id':attempt.id,'course':public_course(c)}
+@app.post('/api/courses/{cid}/decision')
+async def decision(cid:str,data:Decision,user=Depends(current_user),db:DB=Depends(db_session)):
+    c=owned_course(db,user,cid)
+    if c.pending_attempt!=data.attempt_id: raise HTTPException(409,'This decision is no longer pending')
+    attempt=db.get(Attempt,data.attempt_id)
+    remediation=await generate(db,user,c.topic,focus=attempt.result['weaknesses']) if data.remediate else []
+    # Recheck under a row lock after the external call to avoid double insertion.
+    db.expire(c)
+    c=owned_course(db,user,cid,True)
+    if c.pending_attempt!=data.attempt_id: raise HTTPException(409,'Decision already applied')
+    c.current+=1
+    if remediation: c.missions=c.missions[:c.current]+remediation+c.missions[c.current:]
+    c.pending_attempt=None; audit(db,user.id,'remediation_accepted' if data.remediate else 'remediation_declined',cid); db.commit()
+    return public_course(c)
