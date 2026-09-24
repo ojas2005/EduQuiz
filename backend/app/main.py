@@ -224,3 +224,18 @@ def export(user=Depends(current_user),db:DB=Depends(db_session)):
     except Exception: raise HTTPException(503,'Report storage unavailable')
     audit(db,user.id,'report_exported'); db.commit()
     return Response(json.dumps(data),media_type='application/json',headers={'Content-Disposition':'attachment; filename="eduquiz-report.json"'})
+@app.get('/api/admin/users')
+def users(offset:int=0,user=Depends(admin),db:DB=Depends(db_session)):
+    return [public_user(u) for u in db.scalars(select(User).order_by(User.created_at.desc()).offset(max(offset,0)).limit(100))]
+@app.patch('/api/admin/users/{uid}')
+def suspend(uid:str,data:Suspension,user=Depends(admin),db:DB=Depends(db_session)):
+    target=db.get(User,uid)
+    if not target: raise HTTPException(404,'User not found')
+    if target.role=='admin': raise HTTPException(400,'Administrator suspension requires operator review')
+    target.suspended=data.suspended
+    if data.suspended:
+        for s in db.scalars(select(Session).where(Session.user_id==uid)): s.revoked=True
+    audit(db,user.id,'user_suspended' if data.suspended else 'user_restored',uid); db.commit(); return public_user(target)
+@app.get('/api/admin/logs')
+def logs(offset:int=0,user=Depends(admin),db:DB=Depends(db_session)):
+    return [{'actor_id':a.actor_id,'action':a.action,'target_id':a.target_id,'date':a.created_at.isoformat()} for a in db.scalars(select(Audit).order_by(Audit.created_at.desc()).offset(max(offset,0)).limit(100))]
