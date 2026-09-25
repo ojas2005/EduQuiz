@@ -1,0 +1,66 @@
+x-api: &api
+  build: ./backend
+  env_file: .env
+  restart: unless-stopped
+  depends_on:
+    postgres: {condition: service_healthy}
+    redis: {condition: service_healthy}
+    init: {condition: service_completed_successfully}
+  healthcheck:
+    test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+    interval: 20s
+    timeout: 5s
+    retries: 3
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: eduquiz
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/setup_env.py}
+      POSTGRES_DB: eduquiz
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eduquiz"]
+      interval: 5s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "noeviction"]
+    volumes: ["redis_data:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+  blob:
+    image: mcr.microsoft.com/azure-storage/azurite:3.35.0
+    command: azurite-blob --blobHost 0.0.0.0 --location /data --skipApiVersionCheck
+    environment:
+      AZURITE_ACCOUNTS: ${BLOB_ACCESS_KEY}:${BLOB_SECRET_KEY}
+    volumes: ["blob_data:/data"]
+  blob-init:
+    build: ./backend
+    depends_on: [blob]
+    env_file: .env
+    command: ["python", "-m", "app.init_blob"]
+  init:
+    build: ./backend
+    env_file: .env
+    depends_on:
+      postgres: {condition: service_healthy}
+    command: ["python", "-m", "app.manage", "init-db"]
+  api1: *api
+  api2: *api
+  frontend:
+    build: ./frontend
+  gateway:
+    image: nginx:1.28-alpine
+    ports: ["127.0.0.1:8080:80"]
+    volumes: ["./infra/nginx.conf:/etc/nginx/nginx.conf:ro"]
+    depends_on:
+      api1: {condition: service_healthy}
+      api2: {condition: service_healthy}
+      frontend: {condition: service_started}
+volumes:
+  postgres_data:
+  redis_data:
+  blob_data:
