@@ -39,3 +39,9 @@ Browser checks against the running Docker stack passed for:
 - No warning/error console messages in the isolated verification tab.
 
 The final TypeScript/Vite production build passed. The redesigned admin interface and real-provider generation were not exercised in this browser pass; the existing backend integration evidence above remains separate. Synthetic demo data was used throughout.
+
+## Dark mode verification — 27 September 2026
+- Added a keyboard-accessible header switch to the public and signed-in UI, with OS-theme default, saved explicit preference, cross-tab updates, and early theme application.
+- Browser checks passed for mouse toggling, Space-key toggling, dark preference surviving refresh, dark dialogs, and a 44×44px toggle in the 375px signed-in header.
+- Dark landing page document width matched 375, 768, 1024 and 1440px viewports. Temporary viewport overrides were reset. Dashboard and public-page dark palettes were visually inspected, including the interactive quiz preview. No browser warnings or errors were recorded in the verification tab.
+- Production TypeScript/Vite build passed. Cross-tab and live OS-theme change listeners were implemented but not exercised by browser automation. This is not a formal accessibility audit.

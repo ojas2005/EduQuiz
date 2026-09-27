@@ -25,3 +25,6 @@ Admin: independent user/log pagination and usable narrow-screen tables.
 
 ## Behavior
 Hash routes preserve navigation across refresh/back. A pending result is recoverable from report evidence. Async actions have scoped loading, duplicate-submission protection, retry feedback and expired-session recovery. Native modal dialogs trap focus, support Escape and return focus. Form errors stay in context. Reduced motion supported. No page-level horizontal overflow at 375, 768, 1024 or 1440px.
+
+## Dark mode
+The header switch is available on both the landing page and every signed-in screen. It follows the OS theme on a first visit, then saves an explicit light/dark choice locally and synchronizes it across tabs. An external pre-render script applies the initial theme without weakening the existing CSP. The evening palette uses charcoal `#191c19`, raised surfaces `#222722`, cream text `#eeeee5`, peach actions `#f0a17b` and sage success states. Controls remain at least 44px and expose their state through an accessible switch. Theme changes do not reset forms or learning progress.

@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { ArrowRight, ArrowUpRight, Check, BookOpen, CornerDownRight, ShieldCheck } from 'lucide-react';
 import { Brand, Button } from '../components/UI';
-export function Landing({ onAuth, onTopic }: { onAuth: (mode: 'signup' | 'login') => void; onTopic: (topic: string) => void }) {
+import { ThemeToggle, type Theme } from '../components/ThemeToggle';
+export function Landing({ onAuth, onTopic, theme, onToggleTheme }: { theme: Theme; onToggleTheme: () => void; onAuth: (mode: 'signup' | 'login') => void; onTopic: (topic: string) => void }) {
   const [choice, setChoice] = useState<number | null>(null);
   const [topic, setTopic] = useState('');
   return <div className="landing-page">
-    <header className="public-header"><a href="#overview" aria-label="EduQuiz home"><Brand/></a><nav aria-label="Public navigation"><a href="#how-it-works">The method</a><Button variant="ghost" onClick={() => onAuth('login')}>Log in</Button><Button variant="dark" onClick={() => onAuth('signup')}>Start learning<ArrowUpRight size={16} aria-hidden="true"/></Button></nav></header>
+    <header className="public-header"><a href="#overview" aria-label="EduQuiz home"><Brand/></a><nav aria-label="Public navigation"><ThemeToggle theme={theme} onToggle={onToggleTheme}/><a href="#how-it-works">The method</a><Button variant="ghost" onClick={() => onAuth('login')}>Log in</Button><Button variant="dark" onClick={() => onAuth('signup')}>Start learning<ArrowUpRight size={16} aria-hidden="true"/></Button></nav></header>
     <main id="main-content">
       <section className="hero">
         <div className="hero-copy"><div className="eyebrow"><span className="tiny-rule"/> FOR THE EVER-CURIOUS</div><h1>Less scrolling.<br/>More <span className="serif-italic">understanding.</span></h1><p>That thing you’ve always wanted to learn?<br className="desktop-break"/> Turn it into a series of small, satisfying missions.<br className="desktop-break"/> Learn it. Try it. Make it yours.</p>

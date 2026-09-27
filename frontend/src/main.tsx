@@ -10,7 +10,9 @@ import { MissionPage } from './pages/Mission';
 import { Reports } from './pages/Reports';
 import { SettingsPage } from './pages/Settings';
 import { AdminPage } from './pages/Admin';
+import { ThemeToggle, useTheme } from './components/ThemeToggle';
 import './style.css';
+import './theme.css';
 const names: Record<Page, string> = { overview: 'Overview', learning: 'My learning', practice: 'Practice studio', growth: 'Growth report', settings: 'Settings', admin: 'Administration', mission: 'Learning mission' };
 const navItems = [{ page: 'overview', label: 'Overview', icon: LayoutDashboard }, { page: 'learning', label: 'My learning', icon: BookOpen }, { page: 'practice', label: 'Practice studio', icon: Zap }, { page: 'growth', label: 'Growth report', icon: ChartNoAxesCombined }, { page: 'settings', label: 'Settings', icon: Settings }] as const;
 function getRoute(): Route {
@@ -18,6 +20,7 @@ function getRoute(): Route {
   return Object.prototype.hasOwnProperty.call(names, page) ? { page: page as Page, id } : { page: 'overview' };
 }
 function App() {
+  const { theme, toggleTheme } = useTheme();
   const [route, setRoute] = useState<Route>(getRoute), [user, setUser] = useState<User | null>(null), [ready, setReady] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]), [report, setReport] = useState<Report>({ attempts: [], skills: [] }), [credential, setCredential] = useState<Credential>({ configured: false, demo_mode: false });
   const [active, setActive] = useState<Course | null>(null), [result, setResult] = useState<Result | null>(null), [dataLoading, setDataLoading] = useState(false), [missionLoading, setMissionLoading] = useState(false), [loadError, setLoadError] = useState(''), [revision, setRevision] = useState(0);
@@ -81,9 +84,9 @@ function App() {
   }
   const pending = report.attempts.find(attempt => attempt.id === active?.pending_attempt);
   if (!ready) return <Loading/>;
-  return <><a className="skip-link" href="#main-content">Skip to content</a>{!user ? <Landing onAuth={mode => { setError(''); setAuth(mode); }} onTopic={topic => { setIntendedTopic(topic); setError(''); setAuth('signup'); }}/> : <div className="workspace-shell">
+  return <><a className="skip-link" href="#main-content">Skip to content</a>{!user ? <Landing theme={theme} onToggleTheme={toggleTheme} onAuth={mode => { setError(''); setAuth(mode); }} onTopic={topic => { setIntendedTopic(topic); setError(''); setAuth('signup'); }}/> : <div className="workspace-shell">
     <aside className="sidebar"><a href="#overview" className="sidebar-brand" aria-label="EduQuiz overview"><Brand/></a><div className="sidebar-label">YOUR WORKSPACE</div><nav aria-label="Main navigation">{navItems.map(({ page, label, icon: Icon }) => <a key={page} href={'#' + page} className={route.page === page || route.page === 'mission' && page === 'learning' ? 'active' : ''} aria-current={route.page === page ? 'page' : undefined}><Icon size={19} aria-hidden="true"/>{label}{page === 'learning' && <span className="nav-count">{courses.filter(course => !course.practice).length}</span>}</a>)}{user.role === 'admin' && <a href="#admin" className={route.page === 'admin' ? 'active' : ''}><ShieldCheck size={19} aria-hidden="true"/>Administration</a>}</nav><div className="sidebar-note"><span className="eyebrow">A NOTE TO SELF</span><p>You don’t have to<br/>learn it all <em>today.</em></p><button onClick={() => start()} className="text-link">Just take the next step<ArrowRight size={15} aria-hidden="true"/></button></div><a href="#settings" className="sidebar-profile"><span className="avatar">{user.name.slice(0, 1).toUpperCase()}</span><span><strong>{user.name}</strong><small>{user.role === 'admin' ? 'Administrator' : 'Your personal workspace'}</small></span><ChevronRight size={16} aria-hidden="true"/></a></aside>
-    <div className="workspace-body"><header className="workspace-header"><button className="icon-button menu-button" aria-label="Open navigation" aria-expanded={menu} onClick={() => setMenu(true)}><Menu size={21}/></button><span className="breadcrumb">Workspace<ChevronRight size={13} aria-hidden="true"/><strong>{names[route.page]}</strong></span><span className="header-date">{new Date().toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}</span><a href="#settings" className="avatar header-avatar" aria-label="Open account settings">{user.name.slice(0, 1).toUpperCase()}</a></header>
+    <div className="workspace-body"><header className="workspace-header"><button className="icon-button menu-button" aria-label="Open navigation" aria-expanded={menu} onClick={() => setMenu(true)}><Menu size={21}/></button><span className="breadcrumb">Workspace<ChevronRight size={13} aria-hidden="true"/><strong>{names[route.page]}</strong></span><span className="header-date">{new Date().toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}</span><ThemeToggle theme={theme} onToggle={toggleTheme}/><a href="#settings" className="avatar header-avatar" aria-label="Open account settings">{user.name.slice(0, 1).toUpperCase()}</a></header>
       <main id="main-content" className="workspace-content" tabIndex={-1}>{error && !auth && !create && <Alert error onDismiss={() => setError('')}>{error}</Alert>}{notice && <Alert onDismiss={() => setNotice('')}>{notice}</Alert>}{loadError && <Alert error>{loadError}<Button variant="ghost" onClick={() => setRevision(value => value + 1)}>Retry loading</Button></Alert>}
         {dataLoading && !courses.length && ['overview', 'learning', 'practice', 'growth'].includes(route.page) ? <Loading/> : <>
           {route.page === 'overview' && <Dashboard user={user} courses={courses} report={report} credential={credential} open={openCourse} create={start} navigate={navigate}/>}
