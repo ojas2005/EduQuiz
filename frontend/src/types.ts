@@ -1,4 +1,4 @@
-export type User = { id: string; name: string; email: string; role: 'user' | 'admin'; suspended: boolean };
+export type User = { id: string; name: string; email: string; role: 'user' | 'admin'; suspended: boolean; bio: string; avatar: string };
 export type Question = { prompt: string; options: string[] };
 export type Mission = { title: string; objective: string; lesson?: string; tasks?: string[]; questions?: Question[]; difficulty?: string; importance?: string; question_count?: number };
 export type Course = { id: string; topic: string; practice: boolean; current: number; missions: Mission[]; pending_attempt: string | null; complete: boolean; suggested_topic?: { topic: string; reason: string } | null };

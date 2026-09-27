@@ -50,8 +50,12 @@ class GenerationState(TypedDict):
     curriculum: dict
 
 def build_graph(provider, model, api_key):
-    llm = (ChatAnthropic(model=model, api_key=api_key, max_tokens=8000, timeout=60, max_retries=1)
-           if provider == 'anthropic' else ChatOpenAI(model=model, api_key=api_key, timeout=60, max_retries=1, max_tokens=8000))
+    if provider == 'anthropic':
+        llm = ChatAnthropic(model=model, api_key=api_key, max_tokens=8000, timeout=60, max_retries=1)
+    elif provider == 'groq':
+        llm = ChatOpenAI(base_url='https://api.groq.com/openai/v1', model=model, api_key=api_key, timeout=60, max_retries=1, max_tokens=8000)
+    else:
+        llm = ChatOpenAI(model=model, api_key=api_key, timeout=60, max_retries=1, max_tokens=8000)
     async def generate(state):
         count = 'exactly 1' if state['focus'] or state['practice'] else 'between 2 and 8'
         messages = [('system', f"""You are an educational curriculum designer. Produce {count} missions (chapters).

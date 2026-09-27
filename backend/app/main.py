@@ -4,13 +4,13 @@ from typing import Literal
 from fastapi import FastAPI, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DB
 from .storage import blob_container
 from .config import settings
-from .models import User, Session, Credential, Course, Attempt, Audit, db_session, now
+from .models import User, UserProfile, Session, Credential, Course, Attempt, Audit, db_session, now
 from .security import (passwords, cipher, redis, digest, issue, public_user, current_user, admin, audit, rate_limit, require_origin, DUMMY_HASH)
 from .learning import build_graph, grade, demo_curriculum, demo_paragraphs, topic_suggestion
 
@@ -22,8 +22,18 @@ class Login(Input):
     password: str = Field(min_length=12, max_length=128)
 class Signup(Login):
     name: str = Field(min_length=1, max_length=100)
+class ProfileInput(Input):
+    name: str = Field(min_length=1, max_length=100)
+    bio: str = Field(default='', max_length=300)
+    avatar: Literal['initials', 'book', 'sparkles', 'sprout', 'rocket', 'coffee'] = 'initials'
+
+    @field_validator('name', 'bio', mode='before')
+    @classmethod
+    def trim_text(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
 class KeyInput(Input):
-    provider: Literal['openai', 'anthropic']
+    provider: Literal['openai', 'anthropic', 'groq']
     model: str = Field(min_length=1, max_length=100, pattern=r'^[a-zA-Z0-9._:/-]+$')
     api_key: str = Field(min_length=10, max_length=512)
 class TopicInput(Input):
@@ -107,9 +117,29 @@ def logout(request: Request, response: Response, user=Depends(current_user), db:
     response.delete_cookie('refresh_token',path='/api/auth'); return {'ok':True}
 @app.get('/api/me')
 def me(user=Depends(current_user)): return public_user(user)
+def user_limit(user, key, limit, seconds=60):
+    if user.email != 'learner@eduquiz.com':
+        rate_limit(key, limit, seconds)
+
+@app.put('/api/me', dependencies=[Depends(require_origin)])
+def update_profile(data: ProfileInput, user=Depends(current_user), db: DB=Depends(db_session)):
+    rate_limit('profile:'+user.id, 20)
+    # Lock the owner row so concurrent first-time saves cannot duplicate a profile.
+    db.scalar(select(User).where(User.id==user.id).with_for_update())
+    profile=db.get(UserProfile, user.id)
+    if profile is None:
+        profile=UserProfile(user_id=user.id)
+        db.add(profile)
+    user.name=data.name
+    profile.bio=data.bio
+    profile.avatar=data.avatar
+    user.profile=profile
+    audit(db,user.id,'profile_updated'); db.commit()
+    return public_user(user)
+
 @app.put('/api/credential')
 def save_key(data:KeyInput, user=Depends(current_user), db:DB=Depends(db_session)):
-    rate_limit('key:'+user.id,10)
+    user_limit(user, 'key:'+user.id, 10)
     row=db.get(Credential,user.id)
     if not row: row=Credential(user_id=user.id); db.add(row)
     row.provider=data.provider; row.model=data.model; row.ciphertext=cipher.encrypt(data.api_key.encode()).decode()
@@ -125,7 +155,7 @@ def delete_key(user=Depends(current_user), db:DB=Depends(db_session)):
     audit(db,user.id,'credential_deleted'); db.commit(); return {'ok':True}
 
 async def generate(db,user,topic,practice=False,focus=None):
-    rate_limit('generation:'+user.id,5,3600)
+    user_limit(user, 'generation:'+user.id, 5, 3600)
     key=db.get(Credential,user.id)
     if key is None:
         if settings.demo_mode and topic.lower() in ('sentences', 'paragraphs'):
@@ -184,7 +214,7 @@ def course(cid:str,user=Depends(current_user),db:DB=Depends(db_session)):
     return public_course(owned_course(db,user,cid))
 @app.post('/api/courses/{cid}/submit')
 def submit(cid:str,data:Submission,user=Depends(current_user),db:DB=Depends(db_session)):
-    rate_limit('quiz:'+user.id,30)
+    user_limit(user, 'quiz:'+user.id, 30)
     c=owned_course(db,user,cid,True)
     if c.pending_attempt: raise HTTPException(409,'Choose your next step before continuing')
     if c.current!=data.mission_index or c.current>=len(c.missions): raise HTTPException(409,'Mission changed; reload your path')
@@ -250,7 +280,7 @@ def report(user=Depends(current_user),db:DB=Depends(db_session)):
     return {'attempts':[{'id':a.id,'course_id':a.course_id,'date':a.created_at.isoformat(),**a.result} for a in attempts], 'skills':[{'name':s,'score':round(c/t*100),'evidence':t} for s,(c,t) in totals.items()]}
 @app.post('/api/report/export')
 def export(user=Depends(current_user),db:DB=Depends(db_session)):
-    rate_limit('export:'+user.id,5,3600)
+    user_limit(user, 'export:'+user.id, 5, 3600)
     data=report(user,db)
     key=f'reports/{user.id}/{__import__("uuid").uuid4()}.json'
     try: blob_container().upload_blob(name=key,data=json.dumps(data).encode(),overwrite=False)

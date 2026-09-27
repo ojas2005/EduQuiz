@@ -1,5 +1,6 @@
 """Standard-library black-box smoke tests. Requires local Compose demo stack."""
 import json
+import time
 import uuid
 import secrets
 import urllib.request
@@ -13,6 +14,8 @@ class Client:
         self.http=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.jar))
         self.token=''
     def call(self,path,method='GET',data=None,expected=200):
+        # Stay below the gateway's 10 requests/second outside explicit rate-limit checks.
+        time.sleep(0.12)
         headers={'Origin':BASE,'Content-Type':'application/json'}
         if self.token: headers['Authorization']='Bearer '+self.token
         req=urllib.request.Request(BASE+'/api'+path,data=json.dumps(data).encode() if data is not None else (b'' if method=='POST' else None),headers=headers,method=method)
@@ -30,6 +33,22 @@ def main():
     for client,name in [(a,'learner'),(b,'operator')]:
         data=client.call('/auth/signup','POST',{'name':name,'email':f'{name}-{suffix}@example.com','password':password})
         client.token=data['access_token']
+    # Profiles are owned by the authenticated user and survive session refresh.
+    original=a.call('/me')
+    assert original['bio']=='' and original['avatar']=='initials'
+    profile=a.call('/me','PUT',{'name':'  Curious Learner  ','bio':'  Learning one idea at a time.  ','avatar':'sprout'})
+    assert profile['name']=='Curious Learner' and profile['bio']=='Learning one idea at a time.' and profile['avatar']=='sprout'
+    assert b.call('/me')['name']=='operator' and b.call('/me')['bio']==''
+    refreshed=a.call('/auth/refresh','POST'); a.token=refreshed['access_token']
+    assert refreshed['user']['avatar']=='sprout' and a.call('/me')['name']=='Curious Learner'
+    for invalid_profile in [
+        {'name':'   '}, {'name':'x'*101}, {'name':'Learner','bio':'x'*301},
+        {'name':'Learner','avatar':'https://untrusted.example/avatar.svg'},
+        {'name':'Learner','role':'admin'}, {'name':'Learner','user_id':b.call('/me')['id']},
+    ]:
+        a.call('/me','PUT',invalid_profile,422)
+    Client().call('/me','PUT',{'name':'Unauthorized'},401)
+    assert a.call('/me')['role']=='user'
     invalid=a.call('/auth/signup','POST',{'name':'Test','email':'bad','password':'short-secret'},422)
     assert 'short-secret' not in json.dumps(invalid)
     a.call('/admin/users',expected=403)

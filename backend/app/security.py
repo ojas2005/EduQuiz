@@ -22,7 +22,10 @@ def audit(db, actor, action, target=None):
     from .models import Audit
     db.add(Audit(actor_id=actor, action=action, target_id=target))
 def require_origin(request: Request):
-    if request.headers.get('origin') != settings.origin:
+    origin = request.headers.get('origin')
+    host = request.headers.get('host')
+    valid = {settings.origin, f'http://{host}', f'https://{host}'} if host else {settings.origin}
+    if not origin or origin not in valid:
         raise HTTPException(403, 'Untrusted request origin')
 def rate_limit(key, limit, seconds=60):
     try:
@@ -42,7 +45,7 @@ def issue(db, user, response, session=None):
     token = jwt.encode({'sub':user.id,'sid':session.id,'iss':'eduquiz','aud':'eduquiz-web','iat':now(),'exp':now()+timedelta(minutes=15)}, settings.jwt_secret, algorithm='HS256')
     response.set_cookie('refresh_token', f'{session.id}.{refresh}', httponly=True, secure=settings.secure_cookies, samesite='strict', path='/api/auth', max_age=max(0, int((session.expires_at-now()).total_seconds())))
     return {'access_token': token, 'user': public_user(user)}
-def public_user(u): return {'id':u.id,'name':u.name,'email':u.email,'role':u.role,'suspended':u.suspended}
+def public_user(u): return {'id':u.id,'name':u.name,'email':u.email,'role':u.role,'suspended':u.suspended,'bio':u.profile.bio if u.profile else '', 'avatar':u.profile.avatar if u.profile else 'initials'}
 def current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer), db: DB = Depends(db_session)):
     try:
         if credentials is None: raise ValueError()

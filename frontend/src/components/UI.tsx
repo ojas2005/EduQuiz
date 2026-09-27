@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, useId, type ReactNode } from 'react';
 import { ArrowRight, BookOpen, Check, LoaderCircle, X } from 'lucide-react';
 
 export function Brand() {
@@ -21,19 +21,27 @@ export function Empty({ title, children, action, actionLabel = 'Start learning' 
 export function Alert({ children, error = false, onDismiss }: { children: ReactNode; error?: boolean; onDismiss?: () => void }) {
   return <div className={`alert ${error ? 'alert-error' : ''}`} role={error ? 'alert' : 'status'}><span>{children}</span>{onDismiss && <button className="icon-button" onClick={onDismiss} aria-label="Dismiss message"><X size={18}/></button>}</div>;
 }
-export function Modal({ title, children, onClose, busy = false, subtitle }: { title: string; subtitle?: string; children: ReactNode; onClose: () => void; busy?: boolean }) {
-  const ref = useRef<HTMLDialogElement>(null);
+export function Modal({ title, children, onClose, busy = false, subtitle }: { title: string; subtitle?: string; children: ReactNode | ((close: (after?: () => void) => void) => ReactNode); onClose: () => void; busy?: boolean }) {
+  const ref = useRef<HTMLDialogElement>(null), timer = useRef<number | undefined>(undefined);
+  const [closing, setClosing] = useState(false);
+  const headingId = useId();
+  function requestClose(after?: () => void) {
+    if (busyRef.current || closing) return;
+    setClosing(true);
+    timer.current = window.setTimeout(() => { closeRef.current(); after?.(); }, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 180);
+  }
   const closeRef = useRef(onClose); closeRef.current = onClose;
   const busyRef = useRef(busy); busyRef.current = busy;
+  const opener = useRef(document.activeElement as HTMLElement | null);
   useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
+    const previous = opener.current;
     const dialog = ref.current!; dialog.showModal();
     const oldOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden';
-    return () => { dialog.close(); document.body.style.overflow = oldOverflow; previous?.focus(); };
+    return () => { window.clearTimeout(timer.current); dialog.close(); document.body.style.overflow = oldOverflow; previous?.focus(); };
   }, []);
-  return <dialog ref={ref} className="modal" aria-labelledby="dialog-heading" onCancel={event => { event.preventDefault(); if (!busyRef.current) closeRef.current(); }}>
-    <button className="icon-button modal-close" aria-label="Close dialog" disabled={busy} onClick={onClose}><X size={20}/></button>
-    <span className="eyebrow">YOUR LEARNING, YOUR WAY</span><h2 id="dialog-heading">{title}</h2>{subtitle && <p>{subtitle}</p>}{children}
+  return <dialog ref={ref} className={`modal ${closing ? 'is-closing' : ''}`} aria-labelledby={headingId} onCancel={event => { event.preventDefault(); requestClose(); }}>
+    <button className="icon-button modal-close" aria-label="Close dialog" disabled={busy} onClick={() => requestClose()}><X size={20}/></button>
+    <span className="eyebrow">YOUR LEARNING, YOUR WAY</span><h2 id={headingId}>{title}</h2>{subtitle && <p>{subtitle}</p>}{typeof children === 'function' ? children(requestClose) : children}
   </dialog>;
 }
 export function PageHeading({ eyebrow, title, description, action }: { eyebrow: string; title: string; description?: string; action?: ReactNode }) {

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from sqlalchemy import create_engine, String, JSON, ForeignKey, DateTime, Boolean, Integer
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, relationship
 from .config import settings
 
 def uid(): return str(uuid.uuid4())
@@ -16,6 +16,12 @@ class User(Base):
     role: Mapped[str] = mapped_column(default='user')
     suspended: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    profile: Mapped['UserProfile | None'] = relationship(uselist=False)
+class UserProfile(Base):
+    __tablename__ = 'user_profiles'
+    user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), primary_key=True)
+    bio: Mapped[str] = mapped_column(String(300), default='')
+    avatar: Mapped[str] = mapped_column(String(20), default='initials')
 class Session(Base):
     __tablename__ = 'sessions'
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
