@@ -104,3 +104,6 @@ Suggested initial retention policy for approval: assessment history until user d
 
 ## Known limits
 This release is not a claim of production certification, pedagogical correctness, universal model support or high availability. There is no email delivery, account recovery, billing, queue worker, malware-scanned upload, admin MFA or content review pipeline yet. Local services use generated secrets but require stronger production identity and network controls. Growth uses provider-authored skill strings; cross-topic collisions and inconsistent labeling should be addressed with a canonical skill taxonomy.
+
+## Topic continuation and shuffled assessment
+The browser owns a persisted display permutation while the API owns the canonical question list and grading. Submission includes the display permutation only to align stored feedback. A completed course may link to a successor through its first mission’s JSON metadata; recommendations are stored with the original curriculum. The continuation endpoint rechecks that link under a course row lock after generation and reuses an existing successor. No additional database columns are introduced; older course snapshots remain readable.

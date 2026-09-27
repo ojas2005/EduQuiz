@@ -47,8 +47,13 @@ def main():
     assert len(c['missions'])==3
     assert all('correct' not in q and 'explanation' not in q for q in c['missions'][0]['questions'])
     b.call('/courses/'+c['id'],expected=404)
-    bad={'mission_index':0,'answers':[1,0,0],'skip':True,'tasks_completed':False}
+    b.call('/courses/'+c['id']+'/continue','POST',expected=404)
+    a.call('/courses/'+c['id']+'/continue','POST',expected=409)
+    assert c['suggested_topic'] is None
+    a.call('/courses/'+c['id']+'/submit','POST',{'mission_index':0,'answers':[0,1,2],'question_order':[0,0,2],'skip':True},422)
+    bad={'mission_index':0,'answers':[1,0,0],'question_order':[2,0,1],'skip':True,'tasks_completed':False}
     r=a.call('/courses/'+c['id']+'/submit','POST',bad)
+    assert r['feedback'][0]['answer']=='I ran, and she walked.'
     assert r['score']==0 and r['course']['current']==0 and not r['can_continue']
     normal={**bad,'skip':False,'tasks_completed':True}
     r=a.call('/courses/'+c['id']+'/submit','POST',normal)
@@ -62,16 +67,26 @@ def main():
     assert r['weaknesses']
     c=a.call('/courses/'+c['id']+'/decision','POST',{'attempt_id':r['attempt_id'],'remediate':False})
     assert c['current']==2 and c['missions'][2]['title']=='Complete thoughts'
-    passed=a.call('/courses/'+c['id']+'/submit','POST',{'mission_index':2,'answers':[2,1,2],'skip':True,'tasks_completed':False})
+    passed=a.call('/courses/'+c['id']+'/submit','POST',{'mission_index':2,'answers':[2,1,2,0],'skip':True,'tasks_completed':False})
     assert passed['score']==100 and passed['course']['current']==3
-    a.call('/courses/'+c['id']+'/submit','POST',{'mission_index':2,'answers':[2,1,2],'skip':True},409)
+    a.call('/courses/'+c['id']+'/submit','POST',{'mission_index':2,'answers':[2,1,2,0],'skip':True},409)
+    finished=a.call('/courses/'+c['id']+'/submit','POST',{'mission_index':3,'answers':[3,1,2,0,1,2],'question_order':[5,3,1,4,2,0],'skip':True})
+    assert finished['score']==100 and finished['course']['complete']
+    assert finished['course']['suggested_topic']['topic']=='Paragraphs'
+    # Seeing a suggestion does not create or generate another course.
+    assert len(a.call('/courses'))==1
+    next_path=a.call('/courses/'+c['id']+'/continue','POST')
+    assert next_path['topic']=='Paragraphs' and len(next_path['missions'])==2
+    assert next_path['missions'][1]['question_count']==5
+    again=a.call('/courses/'+c['id']+'/continue','POST')
+    assert again['id']==next_path['id'] and len(a.call('/courses'))==2
     practice=a.call('/courses','POST',{'topic':'sentences','practice':True})
     result=a.call('/courses/'+practice['id']+'/submit','POST',{'mission_index':0,'answers':[0,1,2],'skip':False})
     assert result['course']['complete'] and not result['course']['pending_attempt']
-    report=a.call('/report'); assert len(report['attempts'])==5
+    report=a.call('/report'); assert len(report['attempts'])==6
     export=a.call('/report/export','POST'); assert export['skills']==report['skills']
-    # The first three generation calls were curriculum, remediation and practice.
-    for _ in range(2): a.call('/courses','POST',{'topic':'unsupported-demo-topic','practice':False},400)
+    # Four generation calls: curriculum, remediation, accepted suggestion and practice.
+    for _ in range(1): a.call('/courses','POST',{'topic':'unsupported-demo-topic','practice':False},400)
     a.call('/courses','POST',{'topic':'unsupported-demo-topic','practice':False},429)
     # Rotate, then replay the old opaque refresh cookie.
     old=next(c.value for c in a.jar if c.name=='refresh_token')
@@ -88,5 +103,5 @@ def main():
     b.call('/admin/users/'+uid,'PATCH',{'suspended':False})
     logs=b.call('/admin/logs'); assert any(l['action']=='user_suspended' for l in logs)
     b.call('/auth/logout','POST'); b.call('/me',expected=401)
-    print('PASS: grading, skip gates, remediation yes/no, stale transitions, ownership, RBAC, credential isolation, origin rejection, rate limits, export, refresh replay, suspension and logout')
+    print('PASS: shuffled feedback, adaptive sizes, opted-in/idempotent topic continuation, grading, skip gates, remediation yes/no, stale transitions, ownership, RBAC, credential isolation, origin rejection, rate limits, export, refresh replay, suspension and logout')
 if __name__=='__main__': main()

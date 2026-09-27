@@ -62,3 +62,8 @@ BYOK is per learner. OpenAI and Anthropic are supported first; “any API key”
 
 ## Release gates
 Complete security and integration tests; run real-provider curriculum quality evaluations; deploy HTTPS with managed secrets and private data services; verify backups; add password recovery/email verification and admin MFA; conduct accessibility and load tests; pin and scan release dependencies; implement versioned database migrations before evolving a populated production schema. These gates distinguish the runnable MVP from a publicly deployable service.
+
+## Learning-flow additions — 27 September 2026
+- Rereading a lesson and reopening its quiz shuffles the question order and clears previous selections, while keeping grading independent of display order. A page refresh preserves the active quiz draft.
+- Finishing a whole topic offers a related next topic in an opt-in dialog, along with a return-home action. Dismissing the dialog never generates or enrolls the learner in another topic.
+- Chapter count and quiz length adapt to topic scope, difficulty and importance within bounded generation limits. The mission screen shows the difficulty, importance and actual question count when available.

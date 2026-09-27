@@ -45,3 +45,10 @@ The final TypeScript/Vite production build passed. The redesigned admin interfac
 - Browser checks passed for mouse toggling, Space-key toggling, dark preference surviving refresh, dark dialogs, and a 44×44px toggle in the 375px signed-in header.
 - Dark landing page document width matched 375, 768, 1024 and 1440px viewports. Temporary viewport overrides were reset. Dashboard and public-page dark palettes were visually inspected, including the interactive quiz preview. No browser warnings or errors were recorded in the verification tab.
 - Production TypeScript/Vite build passed. Cross-tab and live OS-theme change listeners were implemented but not exercised by browser automation. This is not a formal accessibility audit.
+
+## Adaptive learning flow — 27 September 2026
+- Passed 17 backend unit cases covering grading, question budgets, variable demo chapter counts and next-topic selection.
+- Passed four frontend tests covering permutations, guaranteed changed retry order, saved-order validation and canonical answer mapping.
+- Passed the updated full integration suite, including rejection of malformed permutations, shuffled feedback alignment, different quiz sizes, no implicit successor creation, explicit/idempotent successor creation, incomplete/cross-user continuation rejection and existing auth/report/admin regressions.
+- Browser verification with the synthetic Mira account: reread/reshuffle changes order; reload preserves it; correct shuffled answers score 100%; final-topic popup suggests Paragraphs; Not now and Return to home work; reopening and accepting starts the two-chapter Paragraphs path.
+- Production TypeScript/Vite build passed. No real provider call was made for this update; model-selected difficulty, importance, chapter counts and recommendation quality still need live-provider evaluation.

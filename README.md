@@ -14,7 +14,7 @@ Turn a question into a learning path: **learn → try → check → adapt.**
 
 ![EduQuiz dashboard in dark mode, showing a current learning path, progress and assessed skills](doc/assets/dashboard-dark.jpg)
 
-> **A working adaptive-learning MVP.** Bring an OpenAI or Anthropic key, or try the local **sentences** demo without a key. Choose whether to revisit weak skills, take a standalone quiz, or move on to the next topic.
+> **A working adaptive-learning MVP.** Bring an OpenAI or Anthropic key, or try the local **sentences** and **paragraphs** demos without a key. Choose whether to revisit weak skills, take a standalone quiz, or move on to the next topic.
 
 ## Explore the app
 
@@ -52,6 +52,8 @@ All four images are real captures of the local app on **27 September 2026**, usi
 | **Your learning desk** | Resume a path, see covered missions, average quiz score, recent attempts and assessed strengths. |
 | **Adaptive missions** | Generate a multi-mission path with lessons, practical checklists and multiple-choice quizzes. |
 | **Quiz feedback** | Receive a server-calculated score, skill-specific strengths/weaknesses, correct answers and explanations. |
+| **Fresh quiz order** | Returning from the lesson starts a shuffled quiz with cleared selections. Refreshing keeps the current order and answers. |
+| **Topic completion** | Review a suggested next topic, explicitly accept to start it, dismiss it, or return home. |
 | **Skip challenge** | Skip a mission only after passing its quiz with **at least 80%**. A failed skip returns you to the lesson. |
 | **Focused follow-up** | Accept a weakness-only mission before the next topic, or decline and continue. |
 | **Practice studio** | Take a one-mission practice quiz without starting a full learning path. |
@@ -90,7 +92,7 @@ flowchart TD
     Next --> Report[Saved progress and growth report]
 ```
 
-**One topic is a path, not a single prompt.** The normal generator requests 3–6 missions; a practice quiz or a targeted follow-up requests one. The local sentences demo begins with three missions.
+**One topic is a path, not a single prompt.** The normal generator chooses 2–8 chapters based on scope, difficulty and importance; a practice quiz or a targeted follow-up requests one. Quiz size varies from 3–8 questions according to each chapter’s difficulty and importance. The local sentences demo has three chapters (3, 4 and 6 questions); paragraphs has two (3 and 5).
 
 <details>
 <summary><strong>Walk through an example: learning sentences</strong></summary>
@@ -277,7 +279,7 @@ python3 scripts/integration_test.py
 
 Unit tests cover grading and demo schema behavior without provider calls. The integration script exercises auth, ownership, skip gating, remediation, practice, reporting, credentials, rate limits, session revocation and admin controls. It creates synthetic accounts and persistent test records.
 
-**Recorded validation:** production frontend builds, five backend unit tests, integration checks and browser flows have passed. Real-provider generation, load benchmarks and a formal accessibility/security audit have not been completed. See the dated [validation record](doc/VALIDATION.md) for the exact scope; these are recorded checks, not a live CI badge.
+**Recorded validation:** production frontend builds, backend unit tests, shuffle tests, integration checks and browser flows have passed. Real-provider generation, load benchmarks and a formal accessibility/security audit have not been completed. See the dated [validation record](doc/VALIDATION.md) for the exact scope; these are recorded checks, not a live CI badge.
 
 </details>
 

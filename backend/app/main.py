@@ -12,7 +12,7 @@ from .storage import blob_container
 from .config import settings
 from .models import User, Session, Credential, Course, Attempt, Audit, db_session, now
 from .security import (passwords, cipher, redis, digest, issue, public_user, current_user, admin, audit, rate_limit, require_origin, DUMMY_HASH)
-from .learning import build_graph, grade, demo_curriculum
+from .learning import build_graph, grade, demo_curriculum, demo_paragraphs, topic_suggestion
 
 app = FastAPI(title='EduQuiz API', version='0.1.0', docs_url='/api/docs', openapi_url='/api/openapi.json')
 class Input(BaseModel):
@@ -32,6 +32,7 @@ class TopicInput(Input):
 class Submission(Input):
     mission_index: int = Field(ge=0)
     answers: list[int] = Field(min_length=3, max_length=8)
+    question_order: list[int] | None = Field(default=None, min_length=3, max_length=8)
     skip: bool = False
     tasks_completed: bool = False
 class Decision(Input):
@@ -127,23 +128,29 @@ async def generate(db,user,topic,practice=False,focus=None):
     rate_limit('generation:'+user.id,5,3600)
     key=db.get(Credential,user.id)
     if key is None:
-        if settings.demo_mode and topic.lower()=='sentences':
-            missions=demo_curriculum()
+        if settings.demo_mode and topic.lower() in ('sentences', 'paragraphs'):
+            missions=demo_curriculum() if topic.lower() == 'sentences' else demo_paragraphs()
             if focus:
                 matching=[m for m in missions if m['questions'][0]['skill'] in focus]
+                if not matching: raise HTTPException(400, 'These skills need a connected model for focused practice.')
                 mission=dict(matching[0]); mission['title']='Review: '+', '.join(focus)
                 mission['lesson']='\n\n'.join(m['lesson'] for m in matching)
                 mission['objective']='Practice only: '+', '.join(focus)
                 mission['tasks']=['Write an example for each focus skill: '+', '.join(focus), 'Explain how your examples demonstrate these focus skills.']
                 mission['questions']=[q for m in missions for q in m['questions'] if q['skill'] in focus][:8]
                 while len(mission['questions'])<3: mission['questions']+=mission['questions'][:1]
+                # A focused demo reuses only matching questions; omit AI budget metadata.
+                mission.pop('difficulty', None); mission.pop('importance', None)
                 return [mission]
             return missions[:1] if practice else missions
-        raise HTTPException(400,'Add your provider API key in Settings. Local demo supports “sentences” only.')
+        raise HTTPException(400,'Add your provider API key in Settings. Local demo supports “sentences” and “paragraphs”.')
     try:
         graph=build_graph(key.provider,key.model,cipher.decrypt(key.ciphertext.encode()).decode())
         result=await asyncio.wait_for(graph.ainvoke({'topic':topic,'focus':focus or [],'practice':practice}),timeout=90)
-        return result['curriculum']['missions']
+        missions = result['curriculum']['missions']
+        if not practice and not focus and result['curriculum'].get('next_topic'):
+            missions[-1]['next_topic'] = result['curriculum']['next_topic']
+        return missions
     except Exception:
         raise HTTPException(502,'Generation failed. Check your provider, model access, and quota, then retry.')
 
@@ -158,11 +165,11 @@ def public_course(c):
     # Answer keys/explanations never leave the server before submission.
     missions=[]
     for i,m in enumerate(c.missions):
-        public={'title':m['title'],'objective':m['objective']}
+        public={'title':m['title'],'objective':m['objective'], 'difficulty':m.get('difficulty'), 'importance':m.get('importance'), 'question_count':len(m['questions'])}
         if i==c.current:
             public.update({'lesson':m['lesson'],'tasks':m['tasks'],'questions':[{'prompt':q['prompt'],'options':q['options']} for q in m['questions']]})
         missions.append(public)
-    return {'id':c.id,'topic':c.topic,'practice':c.practice,'current':c.current,'missions':missions,'pending_attempt':c.pending_attempt,'complete':c.current>=len(c.missions)}
+    return {'id':c.id,'topic':c.topic,'practice':c.practice,'current':c.current,'missions':missions,'pending_attempt':c.pending_attempt,'complete':c.current>=len(c.missions), 'suggested_topic':topic_suggestion(c.topic, c.missions) if c.current>=len(c.missions) and not c.practice else None}
 @app.post('/api/courses')
 async def create_course(data:TopicInput,user=Depends(current_user),db:DB=Depends(db_session)):
     missions=await generate(db,user,data.topic.strip(),data.practice)
@@ -184,7 +191,11 @@ def submit(cid:str,data:Submission,user=Depends(current_user),db:DB=Depends(db_s
     if not data.skip and not data.tasks_completed and not c.practice: raise HTTPException(400,'Complete the mission tasks first')
     questions=c.missions[c.current]['questions']
     if len(data.answers)!=len(questions) or any(a not in range(4) for a in data.answers): raise HTTPException(422,'Answer every question with a valid option')
+    if data.question_order is not None and sorted(data.question_order) != list(range(len(questions))):
+        raise HTTPException(422, 'Question order must include every question exactly once')
     result=grade(questions,data.answers)
+    if data.question_order is not None:
+        result['feedback'] = [result['feedback'][i] for i in data.question_order]
     result.update({'skip':data.skip,'can_continue':not data.skip or result['passed']})
     attempt=Attempt(user_id=user.id,course_id=c.id,mission_index=c.current,result=result)
     db.add(attempt); db.flush()
@@ -207,6 +218,28 @@ async def decision(cid:str,data:Decision,user=Depends(current_user),db:DB=Depend
     if remediation: c.missions=c.missions[:c.current]+remediation+c.missions[c.current:]
     c.pending_attempt=None; audit(db,user.id,'remediation_accepted' if data.remediate else 'remediation_declined',cid); db.commit()
     return public_course(c)
+@app.post('/api/courses/{cid}/continue')
+async def continue_topic(cid:str,user=Depends(current_user),db:DB=Depends(db_session)):
+    source=owned_course(db,user,cid)
+    if source.practice or source.pending_attempt or source.current < len(source.missions):
+        raise HTTPException(409, 'Finish the learning path before starting its suggested topic')
+    linked=source.missions[0].get('next_course_id')
+    if linked:
+        return public_course(owned_course(db,user,linked))
+    suggestion=topic_suggestion(source.topic, source.missions)
+    missions=await generate(db,user,suggestion['topic'])
+    db.expire(source)
+    source=owned_course(db,user,cid,True)
+    # A second tab can finish generation too; only one successor is persisted.
+    linked=source.missions[0].get('next_course_id')
+    if linked:
+        return public_course(owned_course(db,user,linked))
+    next_course=Course(user_id=user.id,topic=suggestion['topic'],practice=False,missions=missions)
+    db.add(next_course); db.flush()
+    source.missions=[{**source.missions[0], 'next_course_id':next_course.id}, *source.missions[1:]]
+    audit(db,user.id,'suggested_topic_started',next_course.id); db.commit()
+    return public_course(next_course)
+
 @app.get('/api/report')
 def report(user=Depends(current_user),db:DB=Depends(db_session)):
     attempts=list(db.scalars(select(Attempt).where(Attempt.user_id==user.id).order_by(Attempt.created_at)))

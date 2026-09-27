@@ -86,3 +86,21 @@ Tests must cover grading, skip failure/success, remediation decline/accept, owne
 - [OpenAI structured output](https://developers.openai.com/api/docs/guides/structured-outputs): schema-constrained model results; application validation remains necessary.
 - [FastAPI JWT/password security](https://fastapi.tiangolo.com/tutorial/security/oauth2-jwt/): password hashing and bearer authentication building blocks.
 - [LangGraph graph API source documentation](https://github.com/langchain-ai/docs/blob/main/src/oss/langgraph/graph-api.mdx): StateGraph orchestration.
+
+## Adaptive learning update — 27 September 2026
+
+A generated full path contains 2–8 chapters selected by topic scope, difficulty and importance. Each mission classifies its difficulty and importance before content generation. The server validates this question-count policy:
+
+| Difficulty | Supporting | Core | Essential |
+| --- | --- | --- | --- |
+| Foundational | 3 | 4 | 5 |
+| Intermediate | 4 | 5 | 6 |
+| Advanced | 5 | 6 | 8 |
+
+Practice and remediation generation still contain exactly one mission. Existing saved curricula are not resized or regraded. Demo paths use fixed authored content with varying chapter/question counts. Their focused remediation reuses matching questions and does not label a model-selected difficulty.
+
+`POST /api/courses/{id}/submit` accepts optional `question_order`, a permutation of every canonical question index. `answers` always stays in canonical order. Invalid permutations are rejected before grading; feedback is returned/stored in the displayed order. The frontend persists order with the draft, reshuffles on entering the quiz from the lesson, and clears old selections. Option ordering is unchanged.
+
+Completed non-practice course responses include `suggested_topic: {topic, reason}`. New AI curricula persist a model-suggested next topic; older paths use a deterministic fallback. Merely viewing or dismissing the suggestion makes no generation request. `POST /api/courses/{id}/continue` requires ownership and completion, and creates the successor only after explicit acceptance. Repeated calls return the linked successor; a row lock prevents duplicate successor records across racing requests, although simultaneous provider calls can still incur duplicate generation cost. The link and recommendation live in existing mission JSON so no schema migration is needed.
+
+The completion dialog supports accepting, dismissing and returning home. Dismissal is remembered per user/course for the current browser tab; the recommendation can be reopened. API generation failures keep the completed course and show a retryable dialog error. Local demo continuation supports Sentences → Paragraphs; other topics require a configured provider.
