@@ -1,0 +1,13 @@
+export type User = { id: string; name: string; email: string; role: 'user' | 'admin'; suspended: boolean };
+export type Question = { prompt: string; options: string[] };
+export type Mission = { title: string; objective: string; lesson?: string; tasks?: string[]; questions?: Question[] };
+export type Course = { id: string; topic: string; practice: boolean; current: number; missions: Mission[]; pending_attempt: string | null; complete: boolean };
+export type Feedback = { correct: boolean; explanation: string; answer: string };
+export type Assessment = { score: number; passed: boolean; strengths: string[]; weaknesses: string[]; can_continue: boolean; skip: boolean; feedback: Feedback[] };
+export type Attempt = Assessment & { id: string; course_id: string; date: string };
+export type Result = Assessment & { attempt_id: string; course: Course };
+export type Report = { attempts: Attempt[]; skills: { name: string; score: number; evidence: number }[] };
+export type Credential = { configured: boolean; provider?: string; model?: string; demo_mode: boolean };
+export type Audit = { actor_id: string; action: string; target_id: string | null; date: string };
+export type Page = 'overview' | 'learning' | 'practice' | 'growth' | 'settings' | 'admin' | 'mission';
+export type Route = { page: Page; id?: string };

@@ -24,3 +24,18 @@ The initial MinIO registry pulls failed. The delivered implementation uses Azure
 The integration scripts create synthetic records. Original known-password smoke accounts were deactivated after testing; subsequent test runs generate random passwords. No real user data or provider credentials were needed for verification.
 
 The local stack is left running at `http://localhost:8080`. See the README for startup/shutdown commands and admin provisioning. Production use requires the release gates in the PRD and TSP.
+
+## UI redesign verification — 27 September 2026
+
+Applied the requested UI UX Pro Max skill; the product-specific decisions are recorded in `design-system/eduquiz/MASTER.md`. Rebuilt the landing page, dashboard, learning/practice library, mission and result views, growth report, settings and admin interface.
+
+Browser checks against the running Docker stack passed for:
+- Interactive landing-page quiz preview and login.
+- Task-gated quizzes and draft answers surviving a page refresh.
+- A 67% skip challenge preserving the current mission and returning to its lesson.
+- A regular 67% assessment showing strengths, weaknesses and the remediation choice; the result and choice survived refresh. Accepting remediation inserted a mission focused on Joining clauses before the next topic.
+- Standalone practice creation, 100% submission, navigation to its filtered growth report and opening historical answer review.
+- Mobile navigation and dashboard document width matching viewports at 375, 768, 1024 and 1440 pixels. Temporary viewport override reset afterward.
+- No warning/error console messages in the isolated verification tab.
+
+The final TypeScript/Vite production build passed. The redesigned admin interface and real-provider generation were not exercised in this browser pass; the existing backend integration evidence above remains separate. Synthetic demo data was used throughout.
