@@ -28,7 +28,8 @@ All routes are under `/api`. JSON request validation rejects unknown fields. Acc
 | POST | /auth/login | `{email,password}` → same; generic invalid-account response |
 | POST | /auth/refresh | Rotating cookie → new access token and cookie; old reuse revokes session |
 | POST | /auth/logout | Bearer + trusted Origin; revokes all user sessions and clears cookie |
-| GET | /me | Public own profile |
+| GET | /me | Own account, display name, bio and avatar icon |
+| PUT | /me | Bearer + trusted Origin; `{name,bio,avatar}` → updated own profile; 20 updates/minute |
 | GET / PUT / DELETE | /credential | Metadata / `{provider,model,api_key}` / deletion |
 | POST | /courses | `{topic,practice}` → validated curriculum without correct answers |
 | GET | /courses | Up to 100 newest owned paths |
@@ -104,3 +105,12 @@ Practice and remediation generation still contain exactly one mission. Existing 
 Completed non-practice course responses include `suggested_topic: {topic, reason}`. New AI curricula persist a model-suggested next topic; older paths use a deterministic fallback. Merely viewing or dismissing the suggestion makes no generation request. `POST /api/courses/{id}/continue` requires ownership and completion, and creates the successor only after explicit acceptance. Repeated calls return the linked successor; a row lock prevents duplicate successor records across racing requests, although simultaneous provider calls can still incur duplicate generation cost. The link and recommendation live in existing mission JSON so no schema migration is needed.
 
 The completion dialog supports accepting, dismissing and returning home. Dismissal is remembered per user/course for the current browser tab; the recommendation can be reopened. API generation failures keep the completed course and show a retryable dialog error. Local demo continuation supports Sentences → Paragraphs; other topics require a configured provider.
+
+
+## Profile and workspace navigation — 28 September 2026
+
+Profile details live in the new `user_profiles` table keyed by `users.id`; display name remains `users.name`. Existing accounts receive an empty bio and initial avatar until first save. The local init-db command creates the new table without altering existing user rows. Existing deployments must run the updated initializer before starting the updated APIs; production should deploy an equivalent schema migration.
+
+Names are trimmed and limited to 1–100 characters, bios to 300, and avatar values to `initials`, `book`, `sparkles`, `sprout`, `rocket`, or `coffee`. Updates derive ownership from the authenticated session; role, email and user ID cannot be supplied. Saves are rate-limited and audited without storing profile text in the audit event. A user-row lock serializes first-time profile creation. Login, refresh and `/me` all return the saved profile.
+
+Navigation starts closed at every viewport. The header menu button opens a modal drawer with native focus containment, Escape/close/backdrop dismissal, a scrollable middle and a fixed logout footer. Navigation slides over 260–320ms; learning views and dialogs enter over 260–280ms. The close button, profile Done and recommendation Not now actions animate before removal. Reduced-motion preferences disable animation and smooth scrolling.

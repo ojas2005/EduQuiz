@@ -21,6 +21,7 @@ function TopicComplete({ course, userId, onReview, onHome, onStartTopic, busy }:
   course: Course; userId: string; onReview: () => void; onHome: () => void;
   onStartTopic: () => Promise<boolean>; busy: boolean;
 }) {
+  const suggestion = course.suggested_topic;
   const dismissalKey = `eduquiz:suggestion:${userId}:${course.id}`;
   const [open, setOpen] = useState(() => {
     try { return !!course.suggested_topic && !sessionStorage.getItem(dismissalKey); } catch { return !!course.suggested_topic; }
@@ -39,8 +40,8 @@ function TopicComplete({ course, userId, onReview, onHome, onStartTopic, busy }:
       <Button variant="secondary" onClick={onReview} disabled={busy}>View growth report</Button>
       {course.suggested_topic && <Button variant="ghost" disabled={busy} onClick={() => setOpen(true)}>Explore next topic<ArrowRight size={17} aria-hidden="true"/></Button>}
     </div>
-    {open && course.suggested_topic && <Modal title="A good next step?" subtitle="You’ve finished this topic. Continue only if you feel ready." busy={busy} onClose={dismiss}>{close => <>
-      <div className="suggested-topic"><span className="eyebrow">SUGGESTED FOR YOU</span><h3>{course.suggested_topic.topic}</h3><p>{course.suggested_topic.reason}</p></div>
+    {open && suggestion && <Modal title="A good next step?" subtitle="You’ve finished this topic. Continue only if you feel ready." busy={busy} onClose={dismiss}>{close => <>
+      <div className="suggested-topic"><span className="eyebrow">SUGGESTED FOR YOU</span><h3>{suggestion.topic}</h3><p>{suggestion.reason}</p></div>
       {error && <Alert error>We couldn’t open the next topic. Check your model connection or quota and try again. Your completed topic is saved.</Alert>}
       <div className="button-row"><Button disabled={busy} onClick={async () => { setError(false); if (!await onStartTopic()) setError(true); }}>{busy ? 'Opening your next topic…' : 'Yes, start this topic'}<ArrowRight size={17} aria-hidden="true"/></Button><Button variant="secondary" disabled={busy} onClick={() => close()}>Not now</Button></div>
       <Button variant="ghost" disabled={busy} onClick={() => close(onHome)}>Return to home</Button>

@@ -59,8 +59,9 @@ All four images are real captures of the local app on **27 September 2026**, usi
 | **Practice studio** | Take a one-mission practice quiz without starting a full learning path. |
 | **Learning library** | Search topics, filter in-progress/completed paths and revisit completed results. |
 | **Growth report** | View score charts, filter assessment history, inspect skill evidence and download a private report snapshot. |
+| **Your profile** | Click the top-right avatar to edit your display name, choose an icon and save a short bio to your account. |
 | **Account & model settings** | Sign up/in, connect or remove a provider key, select a model, and log out of all devices. |
-| **Comfort & continuity** | Light/dark themes, mobile navigation, keyboard-accessible dialogs, per-tab task/answer drafts and recoverable pending assessment results. |
+| **Comfort & continuity** | Light/dark themes, an on-demand sliding sidebar with a pinned Log out button, gentle dialog/page transitions that respect reduced motion, keyboard-accessible dialogs, per-tab task/answer drafts and recoverable pending assessment results. |
 | **Administration** | Browse users and audit events, suspend/restore learners and paginate each list independently. Admin accounts are protected from this suspension control. |
 
 ### Two roles, clear boundaries
