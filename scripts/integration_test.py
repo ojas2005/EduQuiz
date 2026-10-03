@@ -69,16 +69,36 @@ def main():
     b.call('/courses/'+c['id']+'/continue','POST',expected=404)
     a.call('/courses/'+c['id']+'/continue','POST',expected=409)
     assert c['suggested_topic'] is None
+    recap_path='/courses/'+c['id']+'/recap'
+    assert a.call(recap_path)['missions']==[]
+    b.call(recap_path,expected=404)
+    Client().call(recap_path,expected=401)
+    def check_recap(indices):
+        before_course=a.call('/courses/'+c['id'])
+        before_report=a.call('/report')
+        recap=a.call(recap_path)
+        assert recap['topic']=='sentences'
+        assert [m['index'] for m in recap['missions']]==indices
+        for mission in recap['missions']:
+            assert set(mission)=={'index','title','objective','lesson'}
+            assert mission['lesson'] and mission['title']==before_course['missions'][mission['index']]['title']
+        assert a.call('/courses/'+c['id'])==before_course
+        assert a.call('/report')==before_report
+
     a.call('/courses/'+c['id']+'/submit','POST',{'mission_index':0,'answers':[0,1,2],'question_order':[0,0,2],'skip':True},422)
     bad={'mission_index':0,'answers':[1,0,0],'question_order':[2,0,1],'skip':True,'tasks_completed':False}
     r=a.call('/courses/'+c['id']+'/submit','POST',bad)
     assert r['feedback'][0]['answer']=='I ran, and she walked.'
     assert r['score']==0 and r['course']['current']==0 and not r['can_continue']
+    assert r['mission_index']==0
+    check_recap([0])
     normal={**bad,'skip':False,'tasks_completed':True}
     r=a.call('/courses/'+c['id']+'/submit','POST',normal)
     assert r['course']['pending_attempt']
+    check_recap([0])
     c=a.call('/courses/'+c['id']+'/decision','POST',{'attempt_id':r['attempt_id'],'remediate':True})
     assert c['current']==1 and len(c['missions'])==4
+    check_recap([0])
     a.call('/courses/'+c['id']+'/decision','POST',{'attempt_id':r['attempt_id'],'remediate':True},409)
     # Decline a weak remediation and proceed to original mission two.
     questions=c['missions'][1]['questions']
@@ -86,11 +106,14 @@ def main():
     assert r['weaknesses']
     c=a.call('/courses/'+c['id']+'/decision','POST',{'attempt_id':r['attempt_id'],'remediate':False})
     assert c['current']==2 and c['missions'][2]['title']=='Complete thoughts'
+    check_recap([0,1])
     passed=a.call('/courses/'+c['id']+'/submit','POST',{'mission_index':2,'answers':[2,1,2,0],'skip':True,'tasks_completed':False})
     assert passed['score']==100 and passed['course']['current']==3
     a.call('/courses/'+c['id']+'/submit','POST',{'mission_index':2,'answers':[2,1,2,0],'skip':True},409)
     finished=a.call('/courses/'+c['id']+'/submit','POST',{'mission_index':3,'answers':[3,1,2,0,1,2],'question_order':[5,3,1,4,2,0],'skip':True})
     assert finished['score']==100 and finished['course']['complete']
+    assert finished['mission_index']==3
+    check_recap([0,1,2,3])
     assert finished['course']['suggested_topic']['topic']=='Paragraphs'
     # Seeing a suggestion does not create or generate another course.
     assert len(a.call('/courses'))==1
@@ -103,6 +126,8 @@ def main():
     result=a.call('/courses/'+practice['id']+'/submit','POST',{'mission_index':0,'answers':[0,1,2],'skip':False})
     assert result['course']['complete'] and not result['course']['pending_attempt']
     report=a.call('/report'); assert len(report['attempts'])==6
+    assert [attempt['mission_index'] for attempt in report['attempts']]==[0,0,1,2,3,0]
+    assert len(a.call('/courses/'+practice['id']+'/recap')['missions'])==1
     export=a.call('/report/export','POST'); assert export['skills']==report['skills']
     # Four generation calls: curriculum, remediation, accepted suggestion and practice.
     for _ in range(1): a.call('/courses','POST',{'topic':'unsupported-demo-topic','practice':False},400)
@@ -122,5 +147,5 @@ def main():
     b.call('/admin/users/'+uid,'PATCH',{'suspended':False})
     logs=b.call('/admin/logs'); assert any(l['action']=='user_suspended' for l in logs)
     b.call('/auth/logout','POST'); b.call('/me',expected=401)
-    print('PASS: shuffled feedback, adaptive sizes, opted-in/idempotent topic continuation, grading, skip gates, remediation yes/no, stale transitions, ownership, RBAC, credential isolation, origin rejection, rate limits, export, refresh replay, suspension and logout')
+    print('PASS: read-only mission recaps, shuffled feedback, adaptive sizes, opted-in/idempotent topic continuation, grading, skip gates, remediation yes/no, stale transitions, ownership, RBAC, credential isolation, origin rejection, rate limits, export, refresh replay, suspension and logout')
 if __name__=='__main__': main()

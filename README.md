@@ -57,7 +57,7 @@ All four images are real captures of the local app on **27 September 2026**, usi
 | **Skip challenge** | Skip a mission only after passing its quiz with **at least 80%**. A failed skip returns you to the lesson. |
 | **Focused follow-up** | Accept a weakness-only mission before the next topic, or decline and continue. |
 | **Practice studio** | Take a one-mission practice quiz without starting a full learning path. |
-| **Learning library** | Search topics, filter in-progress/completed paths and revisit completed results. |
+| **Learning library** | Search topics, filter in-progress/completed paths and revisit completed results. From results, choose a specific mission for a lesson-only recap—no tasks, quiz or progress changes. |
 | **Growth report** | View score charts, filter assessment history, inspect skill evidence and download a private report snapshot. |
 | **Your profile** | Click the top-right avatar to edit your display name, choose an icon and save a short bio to your account. |
 | **Account & model settings** | Sign up/in, connect or remove a provider key, select a model, and log out of all devices. |

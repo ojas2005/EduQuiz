@@ -28,3 +28,13 @@
 @keyframes drawer-in{from{transform:translateX(-100%)}to{transform:translateX(0)}}@keyframes drawer-out{from{transform:translateX(0)}to{transform:translateX(-100%)}}
 @keyframes modal-in{from{opacity:0;transform:translateY(18px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}@keyframes modal-out{to{opacity:0;transform:translateY(12px) scale(.985)}}@keyframes content-in{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:translateY(0)}}@keyframes backdrop-in{from{opacity:0}to{opacity:1}}@keyframes backdrop-out{to{opacity:0}}
 @media(max-height:620px){.navigation-drawer .sidebar-note{padding-top:18px;padding-bottom:18px}.navigation-drawer .sidebar-label{margin-top:23px}.navigation-drawer .sidebar-note p{font-size:22px}}
+
+/* Lesson-only recaps keep the assessment and learning path in place. */
+.result-recap { display:flex; flex-wrap:wrap; align-items:center; gap:12px 18px; margin:24px 0; }
+.result-recap p { margin:0; color:var(--muted); font-size:14px; }
+.recap-picker { display:grid; gap:10px; margin:24px 0; color:var(--muted); font-size:14px; }
+.recap-picker select { width:100%; min-width:0; padding:12px; border:1px solid var(--line); border-radius:10px; color:var(--ink); background:var(--paper); font:inherit; }
+.recap-lesson { border-top:1px solid var(--line); padding-top:24px; overflow-wrap:anywhere; }
+.recap-lesson h3 { margin:12px 0; font-size:24px; line-height:1.25; }
+.recap-objective { color:var(--muted); }
+.recap-actions { margin-top:24px; }

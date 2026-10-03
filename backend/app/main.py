@@ -212,6 +212,15 @@ def courses(user=Depends(current_user),db:DB=Depends(db_session)):
 @app.get('/api/courses/{cid}')
 def course(cid:str,user=Depends(current_user),db:DB=Depends(db_session)):
     return public_course(owned_course(db,user,cid))
+@app.get('/api/courses/{cid}/recap')
+def recap(cid:str,user=Depends(current_user),db:DB=Depends(db_session)):
+    c=owned_course(db,user,cid)
+    assessed=set(db.scalars(select(Attempt.mission_index).where(Attempt.user_id==user.id,Attempt.course_id==c.id)))
+    # Reading a recap never advances the path or exposes questions from locked missions.
+    return {'topic':c.topic,'missions':[
+        {'index':i,'title':m['title'],'objective':m['objective'],'lesson':m['lesson']}
+        for i,m in enumerate(c.missions) if i<c.current or i in assessed
+    ]}
 @app.post('/api/courses/{cid}/submit')
 def submit(cid:str,data:Submission,user=Depends(current_user),db:DB=Depends(db_session)):
     user_limit(user, 'quiz:'+user.id, 30)
@@ -233,7 +242,7 @@ def submit(cid:str,data:Submission,user=Depends(current_user),db:DB=Depends(db_s
         if result['weaknesses'] and not c.practice: c.pending_attempt=attempt.id
         else: c.current+=1
     audit(db,user.id,'quiz_submitted',c.id); db.commit()
-    return {**result,'attempt_id':attempt.id,'course':public_course(c)}
+    return {**result,'attempt_id':attempt.id,'mission_index':attempt.mission_index,'course':public_course(c)}
 @app.post('/api/courses/{cid}/decision')
 async def decision(cid:str,data:Decision,user=Depends(current_user),db:DB=Depends(db_session)):
     c=owned_course(db,user,cid)
@@ -277,7 +286,7 @@ def report(user=Depends(current_user),db:DB=Depends(db_session)):
     for a in attempts:
         for skill,(correct,total) in a.result['skills'].items():
             item=totals.setdefault(skill,[0,0]); item[0]+=correct; item[1]+=total
-    return {'attempts':[{'id':a.id,'course_id':a.course_id,'date':a.created_at.isoformat(),**a.result} for a in attempts], 'skills':[{'name':s,'score':round(c/t*100),'evidence':t} for s,(c,t) in totals.items()]}
+    return {'attempts':[{'id':a.id,'course_id':a.course_id,'mission_index':a.mission_index,'date':a.created_at.isoformat(),**a.result} for a in attempts], 'skills':[{'name':s,'score':round(c/t*100),'evidence':t} for s,(c,t) in totals.items()]}
 @app.post('/api/report/export')
 def export(user=Depends(current_user),db:DB=Depends(db_session)):
     user_limit(user, 'export:'+user.id, 5, 3600)
