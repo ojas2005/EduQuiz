@@ -94,7 +94,7 @@ export function MissionChat({ courseId, missionIndex, title }: { courseId: strin
     </button>
     {open && <Modal className="mission-chat" title="Let’s make it click." subtitle={`Mission ${missionIndex + 1} · ${title}`} onClose={() => setOpen(false)}>
       <div className="chat-header-actions">
-        <p className="chat-context">Ask about this lesson. Your connected model receives the lesson and recent messages. Chat stays here until you leave this mission.</p>
+        <p className="chat-context">Ask about this lesson. Your connected model receives the lesson and recent messages. Chat history is saved in this browser.</p>
         <Button variant="secondary" onClick={() => setShowHistory(!showHistory)}>
           {showHistory ? 'Back to chat' : <><History size={15} aria-hidden="true"/> Previous chats</>}
         </Button>
