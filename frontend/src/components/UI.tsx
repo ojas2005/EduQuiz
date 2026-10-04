@@ -21,7 +21,7 @@ export function Empty({ title, children, action, actionLabel = 'Start learning' 
 export function Alert({ children, error = false, onDismiss }: { children: ReactNode; error?: boolean; onDismiss?: () => void }) {
   return <div className={`alert ${error ? 'alert-error' : ''}`} role={error ? 'alert' : 'status'}><span>{children}</span>{onDismiss && <button className="icon-button" onClick={onDismiss} aria-label="Dismiss message"><X size={18}/></button>}</div>;
 }
-export function Modal({ title, children, onClose, busy = false, subtitle }: { title: string; subtitle?: string; children: ReactNode | ((close: (after?: () => void) => void) => ReactNode); onClose: () => void; busy?: boolean }) {
+export function Modal({ title, children, onClose, busy = false, subtitle, className = '' }: { title: string; subtitle?: string; children: ReactNode | ((close: (after?: () => void) => void) => ReactNode); onClose: () => void; busy?: boolean; className?: string }) {
   const ref = useRef<HTMLDialogElement>(null), timer = useRef<number | undefined>(undefined);
   const [closing, setClosing] = useState(false);
   const headingId = useId();
@@ -39,7 +39,7 @@ export function Modal({ title, children, onClose, busy = false, subtitle }: { ti
     const oldOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden';
     return () => { window.clearTimeout(timer.current); dialog.close(); document.body.style.overflow = oldOverflow; previous?.focus(); };
   }, []);
-  return <dialog ref={ref} className={`modal ${closing ? 'is-closing' : ''}`} aria-labelledby={headingId} onCancel={event => { event.preventDefault(); requestClose(); }}>
+  return <dialog ref={ref} className={`modal ${className} ${closing ? 'is-closing' : ''}`} aria-labelledby={headingId} onCancel={event => { event.preventDefault(); requestClose(); }}>
     <button className="icon-button modal-close" aria-label="Close dialog" disabled={busy} onClick={() => requestClose()}><X size={20}/></button>
     <span className="eyebrow">YOUR LEARNING, YOUR WAY</span><h2 id={headingId}>{title}</h2>{subtitle && <p>{subtitle}</p>}{typeof children === 'function' ? children(requestClose) : children}
   </dialog>;

@@ -4,7 +4,7 @@ from typing import Literal
 from fastapi import FastAPI, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
-from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator, model_validator
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DB
@@ -13,6 +13,7 @@ from .config import settings
 from .models import User, UserProfile, Session, Credential, Course, Attempt, Audit, db_session, now
 from .security import (passwords, cipher, redis, digest, issue, public_user, current_user, admin, audit, rate_limit, require_origin, DUMMY_HASH)
 from .learning import build_graph, grade, demo_curriculum, demo_paragraphs, topic_suggestion
+from .tutor import answer_doubt
 
 app = FastAPI(title='EduQuiz API', version='0.1.0', docs_url='/api/docs', openapi_url='/api/openapi.json')
 class Input(BaseModel):
@@ -48,6 +49,24 @@ class Submission(Input):
 class Decision(Input):
     attempt_id: str
     remediate: bool
+class ChatMessage(Input):
+    role: Literal['user', 'assistant']
+    content: str = Field(min_length=1, max_length=4000)
+class ChatInput(Input):
+    mission_index: int = Field(ge=0)
+    question: str = Field(min_length=1, max_length=1500)
+    history: list[ChatMessage] = Field(default_factory=list, max_length=6)
+
+    @field_validator('question', mode='before')
+    @classmethod
+    def trim_question(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+    @model_validator(mode='after')
+    def history_budget(self):
+        if sum(len(item.content) for item in self.history)>6000:
+            raise ValueError('Conversation history is too long')
+        return self
 class Suspension(Input):
     suspended: bool
 
@@ -221,6 +240,28 @@ def recap(cid:str,user=Depends(current_user),db:DB=Depends(db_session)):
         {'index':i,'title':m['title'],'objective':m['objective'],'lesson':m['lesson']}
         for i,m in enumerate(c.missions) if i<c.current or i in assessed
     ]}
+@app.post('/api/courses/{cid}/chat', dependencies=[Depends(require_origin)])
+async def mission_chat(cid:str,data:ChatInput,user=Depends(current_user),db:DB=Depends(db_session)):
+    c=owned_course(db,user,cid)
+    if data.mission_index>=len(c.missions) or data.mission_index>c.current:
+        raise HTTPException(409,'Open an available mission before asking about it')
+    rate_limit('chat:'+user.id, 10)
+    rate_limit('chat_daily:'+user.id, 100, 86400)
+    mission=c.missions[data.mission_index]
+    key=db.get(Credential,user.id)
+    if key is None:
+        if not settings.demo_mode:
+            raise HTTPException(400,'Connect a model in Settings to ask your mission tutor.')
+        return {'reply':'This is saved lesson guidance, not an AI answer to your question.\n\n'+mission['lesson'][:3200]+'\n\nFor a tailored explanation or follow-up, connect your model in Settings.', 'demo':True}
+    try:
+        reply=await asyncio.wait_for(answer_doubt(key.provider,key.model,cipher.decrypt(key.ciphertext.encode()).decode(),
+                                                 c.topic,mission,data.question,data.history),timeout=45)
+    except Exception:
+        raise HTTPException(502,'Your tutor could not reply. Check your model connection or quota, then try again.')
+    # Log only the event; questions and replies are not stored in the database or audit log.
+    audit(db,user.id,'mission_chat',cid); db.commit()
+    return {'reply':reply,'demo':False}
+
 @app.post('/api/courses/{cid}/submit')
 def submit(cid:str,data:Submission,user=Depends(current_user),db:DB=Depends(db_session)):
     user_limit(user, 'quiz:'+user.id, 30)

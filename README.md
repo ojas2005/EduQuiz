@@ -57,6 +57,7 @@ All four images are real captures of the local app on **27 September 2026**, usi
 | **Skip challenge** | Skip a mission only after passing its quiz with **at least 80%**. A failed skip returns you to the lesson. |
 | **Focused follow-up** | Accept a weakness-only mission before the next topic, or decline and continue. |
 | **Practice studio** | Take a one-mission practice quiz without starting a full learning path. |
+| **Mission tutor** | Use the floating chat button to ask about the current lesson, get examples and ask follow-up questions through your connected model. Chats stay in page memory; demo mode offers clearly labelled saved-lesson guidance. |
 | **Learning library** | Search topics, filter in-progress/completed paths and revisit completed results. From results, choose a specific mission for a lesson-only recap—no tasks, quiz or progress changes. |
 | **Growth report** | View score charts, filter assessment history, inspect skill evidence and download a private report snapshot. |
 | **Your profile** | Click the top-right avatar to edit your display name, choose an icon and save a short bio to your account. |
@@ -234,7 +235,7 @@ The model generates lesson content. **The server owns scoring and progression.**
 | Authorization | Server-enforced ownership and user/admin roles. |
 | Provider credentials | Fernet encryption at rest; API responses expose metadata, not the saved key. |
 | Assessment integrity | Unanswered quiz payloads omit answer keys; the server grades and checks the current mission. |
-| Abuse controls | Nginx edge limits plus shared Redis budgets; generation is limited to five requests per user per hour. |
+| Abuse controls | Nginx edge limits plus shared Redis budgets; generation is limited to five requests per user per hour. Mission chat has shared per-user limits of 10 requests/minute and 100/24 hours, plus bounded conversation history and response length. |
 | Browser boundary | Same-origin deployment, origin checks on cookie authentication routes, CSP and other security headers. |
 | Local exposure | Only the gateway is published, on loopback port 8080; database, cache and blob services have no host ports. |
 

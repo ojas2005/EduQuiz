@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, Home, ChevronDown, LockKeyhole, Target, Trophy } from 'lucide-react';
 import type { Assessment, Attempt, Course, Result } from '../types';
+import { MissionChat } from '../components/MissionChat';
 import { MissionRecap } from '../components/MissionRecap';
 import { canonicalAnswers, shuffledOrder, validOrder } from '../quiz';
 import { Alert, Button, Modal, PageHeading, Progress } from '../components/UI';
@@ -68,6 +69,7 @@ export function MissionPage({ course, userId, result, pending, busy, onSubmit, o
   }
   const mission = course.missions[course.current];
   const assessment = result || pending;
+  const tutorIndex = assessment?.mission_index ?? Math.min(course.current, course.missions.length - 1);
   const tasksDone = (mission?.tasks || []).every((_, index) => !!draft.tasks[index]);
   const answered = (mission?.questions || []).filter((_, index) => Number.isInteger(draft.answers[index])).length;
   const decisionPanel = course.pending_attempt && <div className="decision-panel"><span className="eyebrow">CHOOSE YOUR NEXT STEP</span><h3>Spend a little time on the tricky bits?</h3><p>We can add a focused mission for your weak skills before the next topic. It’s your call.</p><div className="button-row"><Button disabled={busy} onClick={() => onDecision(course.pending_attempt!, true)}>Work on these skills<ArrowRight size={17} aria-hidden="true"/></Button><Button disabled={busy} variant="secondary" onClick={() => onDecision(course.pending_attempt!, false)}>Continue to next topic</Button></div></div>;
@@ -82,6 +84,7 @@ export function MissionPage({ course, userId, result, pending, busy, onSubmit, o
           <div className="lesson-actions"><Button type="submit" disabled={busy || answered !== mission.questions?.length}>{busy ? 'Checking your answers…' : 'Submit answers'}<ArrowRight size={17} aria-hidden="true"/></Button>{!course.practice && <Button variant="ghost" disabled={busy} onClick={() => update({ quiz: false, answers: {} })}>Back to lesson</Button>}</div></form></>
           : <><h2>{mission.objective}</h2><p className="mission-scope">{mission.difficulty && `${mission.difficulty} · ${mission.importance} concept · `}{questionCount} quiz questions. Question order changes each time you return from the lesson.</p><div className="lesson-text">{mission.lesson?.split('\n').filter(Boolean).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div><section className="task-section"><span className="eyebrow">PUT THE IDEA TO WORK</span><h3>Your turn.</h3><p>Try each task, then mark it done. The quiz checks your understanding.</p>{mission.tasks?.map((task, index) => <label className={`task-item ${draft.tasks[index] ? 'done' : ''}`} key={index}><input type="checkbox" checked={!!draft.tasks[index]} onChange={event => update({ tasks: { ...draft.tasks, [index]: event.target.checked } })}/><span>{task}</span></label>)}</section><div className="lesson-actions"><Button disabled={!tasksDone} onClick={() => beginQuiz(false)}>Check my understanding<ArrowRight size={17} aria-hidden="true"/></Button><small>{tasksDone ? 'Ready when you are.' : 'Complete the tasks to unlock the quiz.'}</small></div><button className="text-link skip-challenge" onClick={() => beginQuiz(true)}>Already know this? Take the skip challenge<ArrowRight size={15} aria-hidden="true"/></button></>}
       </article><aside className="mission-roadmap"><span className="eyebrow">THE BIGGER PICTURE</span><h2>Your path</h2><p>{course.current} of {course.missions.length} missions covered</p><ol>{course.missions.map((item, index) => <li key={index} className={index === course.current ? 'road-current' : index < course.current ? 'road-done' : ''}><span className="road-index">{index < course.current ? <Check size={15} aria-hidden="true"/> : index === course.current ? index + 1 : <LockKeyhole size={13} aria-hidden="true"/>}</span><div><strong>{item.title}</strong><small>{index < course.current ? 'Covered' : index === course.current ? 'You are here' : 'Coming up'}</small></div></li>)}</ol><div className="roadmap-note"><Trophy size={20} aria-hidden="true"/><p>Understanding takes practice.<br/>You set the pace.</p></div></aside></div>}
+    {tutorIndex >= 0 && <MissionChat key={`${userId}:${course.id}:${tutorIndex}`} courseId={course.id} missionIndex={tutorIndex} title={course.missions[tutorIndex].title}/>}
     {course.complete && <TopicComplete course={course} userId={userId} onReview={onReview} onHome={onHome} onStartTopic={onStartTopic} busy={busy}/>}
   </>;
 }

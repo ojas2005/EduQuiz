@@ -59,3 +59,11 @@ The final TypeScript/Vite production build passed. The redesigned admin interfac
 - Browser verification: sidebar starts closed on desktop; menu opens a sliding drawer; close button and Escape dismiss it and restore focus to the menu. At 390 × 568, drawer and footer bottom coordinates both equal 568 while the middle scrolls.
 - Header avatar opens profile editing; changed display name, sprout icon and bio saved successfully and remained after reload. Sample account values were restored afterward. Done dismisses the editor successfully.
 - New learning-path dialog uses the 260ms entrance animation. Desktop dark-mode profile and drawer styling inspected; no browser warnings or errors recorded. Reduced-motion CSS is implemented but was not exercised with an OS preference change. This is not a formal accessibility audit.
+
+
+## Mission tutor — 3 October 2026
+- TypeScript/Vite production build and 25 backend unit cases passed. Tutor cases cover mission context allowlisting (no quiz keys), follow-up roles, string/text-block responses, empty responses, output length and shared provider configuration.
+- Full integration suite passed with chat ownership/authentication, locked/out-of-range missions, invalid roles, oversized inputs/history, demo responses, 10-request minute budget and unchanged progress/report assertions. Existing recap, grading, auth, reporting and admin regression checks passed.
+- Browser checks on the synthetic Mira account: floating icon opens chat for the current Paragraphs mission, suggested question fills the composer, sending receives explicitly labelled saved-lesson demo guidance, closing/reopening retains the conversation, and a selected quiz answer survives opening/closing chat. No assessment was submitted during browser checks.
+- Dark-mode desktop and 390 × 844 layouts visually inspected; the narrow dialog had no horizontal overflow. Temporary viewport reset and verification tab closed.
+- Real model calls were mocked in unit tests; no paid provider call or live answer-quality evaluation was performed. Provider failure and timeout responses use a generic retry message; conversation bodies are not stored in the application database/audit log. The user's model provider may have its own retention policy.
