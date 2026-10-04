@@ -74,3 +74,10 @@ The final TypeScript/Vite production build passed. The redesigned admin interfac
 - Added a nullable course title through the repeatable init-db upgrade. New paths save the generated title; existing paths use a bounded local fallback without changing their original topic.
 - Browser verification used an isolated legacy-style card containing the long System Design syllabus. Both dashboard and library displayed “System Design Foundations”; searching “Idempotency” still found the card through its original topic.
 - New path, practice and suggested-topic titles satisfy the 3–5 word contract, and remediation preserves the path title. No live-provider title-quality evaluation was performed.
+
+
+## Account chat history and global launcher — 5 October 2026
+- Production frontend build and full local integration suite passed. New coverage verifies saved/reopened conversations, appending turns without losing history, owner-only access, idempotent retries, stale revision rejection, rejection of client-supplied history for saved sessions, and repeatable imports of older browser conversations.
+- Chats now persist in PostgreSQL, superseding the earlier browser-only storage. Audit events omit message bodies; conversation records retain messages for the authenticated owner. Provider context uses bounded recent history while the saved conversation keeps its earlier turns.
+- Browser verification: chat launcher is a fixed direct child of body, visible at the top and bottom of a scrolling dashboard and on Settings. Reload showed a blank chat; Previous chats restored the earlier question/reply; sending a follow-up appended a second turn; New chat created a separate selectable saved conversation.
+- The signed-out landing page has no chat launcher. Verification used an isolated synthetic account, then signed out and closed the test tab. Live-provider answer quality, cross-device UI behavior and adversarial concurrent load were not tested.

@@ -1,16 +1,17 @@
 import asyncio
 import json
+from uuid import UUID, uuid5, NAMESPACE_URL
 from typing import Literal
 from fastapi import FastAPI, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator, model_validator
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DB
 from .storage import blob_container
 from .config import settings
-from .models import User, UserProfile, Session, Credential, Course, Attempt, Audit, db_session, now
+from .models import User, UserProfile, Session, Credential, Course, Attempt, Audit, TutorSession, db_session, now
 from .security import (passwords, cipher, redis, digest, issue, public_user, current_user, admin, audit, rate_limit, require_origin, DUMMY_HASH)
 from .learning import build_graph, grade, demo_curriculum, demo_paragraphs, topic_suggestion
 from .tutor import answer_doubt
@@ -57,6 +58,9 @@ class ChatInput(Input):
     mission_index: int = Field(ge=0)
     question: str = Field(min_length=1, max_length=1500)
     history: list[ChatMessage] = Field(default_factory=list, max_length=6)
+    session_id: UUID | None = None
+    request_id: UUID | None = None
+    revision: int = Field(default=0, ge=0)
 
     @field_validator('question', mode='before')
     @classmethod
@@ -67,6 +71,21 @@ class ChatInput(Input):
     def history_budget(self):
         if sum(len(item.content) for item in self.history)>6000:
             raise ValueError('Conversation history is too long')
+        if bool(self.session_id) != bool(self.request_id) or (self.session_id and self.history):
+            raise ValueError('Saved sessions use server-owned history and a request identifier')
+        return self
+class SavedChatMessage(ChatMessage):
+    demo: bool = False
+class ChatImport(Input):
+    course_id: str = Field(max_length=36)
+    mission_index: int = Field(ge=0)
+    source_id: str = Field(min_length=1, max_length=100)
+    messages: list[SavedChatMessage] = Field(min_length=2, max_length=20)
+
+    @model_validator(mode='after')
+    def paired_messages(self):
+        if len(self.messages)%2 or any(message.role != ('user' if i%2==0 else 'assistant') for i,message in enumerate(self.messages)):
+            raise ValueError('Import complete conversation turns')
         return self
 class Suspension(Input):
     suspended: bool
@@ -241,27 +260,112 @@ def recap(cid:str,user=Depends(current_user),db:DB=Depends(db_session)):
         {'index':i,'title':m['title'],'objective':m['objective'],'lesson':m['lesson']}
         for i,m in enumerate(c.missions) if i<c.current or i in assessed
     ]}
+def public_chat(row, course, include_messages=True):
+    value={'id':row.id,'course_id':row.course_id,'mission_index':row.mission_index,
+           'course_title':course_title(course.topic,course.title),'mission_title':course.missions[row.mission_index]['title'],
+           'revision':row.revision,'date':row.updated_at.isoformat(),
+           'preview':row.messages[0]['content'][:100] if row.messages else 'New conversation'}
+    if include_messages: value['messages']=row.messages
+    return value
+
+def owned_chat(db,user,sid):
+    row=db.scalar(select(TutorSession).where(TutorSession.id==sid,TutorSession.user_id==user.id))
+    if not row: raise HTTPException(404,'Conversation not found')
+    return row
+
+@app.get('/api/chats')
+def chats(offset:int=0,user=Depends(current_user),db:DB=Depends(db_session)):
+    offset=max(0,offset)
+    rows=list(db.execute(select(TutorSession,Course).join(Course,Course.id==TutorSession.course_id)
+        .where(TutorSession.user_id==user.id).order_by(TutorSession.updated_at.desc(),TutorSession.id)
+        .offset(offset).limit(51)))
+    return {'items':[public_chat(row,course,False) for row,course in rows[:50]],
+            'next_offset':offset+50 if len(rows)>50 else None}
+
+@app.get('/api/chats/{sid}')
+def chat(sid:str,user=Depends(current_user),db:DB=Depends(db_session)):
+    row=owned_chat(db,user,sid)
+    return public_chat(row,owned_course(db,user,row.course_id))
+
+@app.post('/api/chats/import', dependencies=[Depends(require_origin)])
+def import_chat(data:ChatImport,user=Depends(current_user),db:DB=Depends(db_session)):
+    course=owned_course(db,user,data.course_id)
+    if data.mission_index>=len(course.missions) or data.mission_index>course.current:
+        raise HTTPException(409,'Mission is not available')
+    sid=str(uuid5(NAMESPACE_URL,f'eduquiz:{user.id}:{course.id}:{data.mission_index}:{data.source_id}'))
+    existing=db.get(TutorSession,sid)
+    if existing: return public_chat(existing,course)
+    rate_limit('chat_import:'+user.id,30)
+    row=TutorSession(id=sid,user_id=user.id,course_id=course.id,mission_index=data.mission_index,
+                     messages=[message.model_dump() for message in data.messages],revision=len(data.messages)//2)
+    db.add(row)
+    try: db.commit()
+    except IntegrityError:
+        db.rollback()
+        row=owned_chat(db,user,sid)
+    return public_chat(row,course)
+
 @app.post('/api/courses/{cid}/chat', dependencies=[Depends(require_origin)])
 async def mission_chat(cid:str,data:ChatInput,user=Depends(current_user),db:DB=Depends(db_session)):
     c=owned_course(db,user,cid)
     if data.mission_index>=len(c.missions) or data.mission_index>c.current:
         raise HTTPException(409,'Open an available mission before asking about it')
+    sid=str(data.session_id) if data.session_id else None
+    row=db.get(TutorSession,sid) if sid else None
+    history=data.history
+    saved_messages=[]
+    if row:
+        if row.user_id!=user.id or row.course_id!=cid or row.mission_index!=data.mission_index:
+            raise HTTPException(404,'Conversation not found')
+        if row.last_request_id==str(data.request_id) and row.messages[-2]['content']==data.question:
+            return {'reply':row.messages[-1]['content'],'demo':row.messages[-1].get('demo',False),'session':public_chat(row,c)}
+        if row.revision!=data.revision:
+            raise HTTPException(409,'This conversation changed in another tab. Reopen it from Previous chats, then send again.')
+        if len(row.messages)>=200:
+            raise HTTPException(409,'This conversation is full. Start a new chat to keep learning.')
+        saved_messages=list(row.messages)
+        recent=saved_messages[-6:]
+        while sum(len(message['content']) for message in recent)>6000: recent=recent[1:]
+        history=[ChatMessage(role=message['role'],content=message['content']) for message in recent]
+    elif sid and data.revision:
+        raise HTTPException(404,'Conversation not found')
     rate_limit('chat:'+user.id, 10)
     rate_limit('chat_daily:'+user.id, 100, 86400)
     mission=c.missions[data.mission_index]
     key=db.get(Credential,user.id)
-    if key is None:
+    demo=key is None
+    if demo:
         if not settings.demo_mode:
             raise HTTPException(400,'Connect a model in Settings to ask your mission tutor.')
-        return {'reply':'This is saved lesson guidance, not an AI answer to your question.\n\n'+mission['lesson'][:3200]+'\n\nFor a tailored explanation or follow-up, connect your model in Settings.', 'demo':True}
-    try:
-        reply=await asyncio.wait_for(answer_doubt(key.provider,key.model,cipher.decrypt(key.ciphertext.encode()).decode(),
-                                                 c.topic,mission,data.question,data.history),timeout=45)
-    except Exception:
-        raise HTTPException(502,'Your tutor could not reply. Check your model connection or quota, then try again.')
-    # Log only the event; questions and replies are not stored in the database or audit log.
-    audit(db,user.id,'mission_chat',cid); db.commit()
-    return {'reply':reply,'demo':False}
+        reply='This is saved lesson guidance, not an AI answer to your question.\n\n'+mission['lesson'][:3200]+'\n\nFor a tailored explanation or follow-up, connect your model in Settings.'
+    else:
+        try:
+            reply=await asyncio.wait_for(answer_doubt(key.provider,key.model,cipher.decrypt(key.ciphertext.encode()).decode(),
+                                                     c.topic,mission,data.question,history),timeout=45)
+        except Exception:
+            raise HTTPException(502,'Your tutor could not reply. Check your model connection or quota, then try again.')
+    response={'reply':reply,'demo':demo}
+    if sid:
+        messages=saved_messages+[{'role':'user','content':data.question},{'role':'assistant','content':reply,'demo':demo}]
+        if row:
+            # Compare-and-swap after generation prevents overwriting another tab's reply.
+            changed=db.execute(update(TutorSession).where(TutorSession.id==sid,TutorSession.revision==data.revision)
+                .values(messages=messages,revision=data.revision+1,last_request_id=str(data.request_id),updated_at=now()))
+            if changed.rowcount!=1:
+                db.rollback()
+                raise HTTPException(409,'Conversation changed. Reopen it from Previous chats before continuing.')
+        else:
+            row=TutorSession(id=sid,user_id=user.id,course_id=cid,mission_index=data.mission_index,
+                             messages=messages,revision=1,last_request_id=str(data.request_id))
+            db.add(row)
+        audit(db,user.id,'mission_chat',cid)
+        try: db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(409,'Conversation already saved. Reopen it from Previous chats.')
+        db.refresh(row)
+        response['session']=public_chat(row,c)
+    return response
 
 @app.post('/api/courses/{cid}/submit')
 def submit(cid:str,data:Submission,user=Depends(current_user),db:DB=Depends(db_session)):

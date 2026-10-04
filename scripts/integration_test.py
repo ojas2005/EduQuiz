@@ -82,6 +82,32 @@ def main():
     chat=a.call(chat_path,'POST',doubt)
     assert chat['demo'] and c['missions'][0]['lesson'] in chat['reply']
     assert a.call('/courses/'+c['id'])==c and a.call('/report')['attempts']==[]
+    # Saved chats retain complete turns and use server-owned history.
+    saved_request={**doubt,'session_id':str(uuid.uuid4()),'request_id':str(uuid.uuid4()),'revision':0}
+    saved=a.call(chat_path,'POST',saved_request)['session']
+    assert saved['revision']==1 and len(saved['messages'])==2
+    assert a.call(chat_path,'POST',saved_request)['session']==saved  # retry does not duplicate a turn
+    assert a.call('/chats/'+saved['id'])==saved
+    assert a.call('/chats')['items'][0]['id']==saved['id']
+    assert b.call('/chats')['items']==[]
+    b.call('/chats/'+saved['id'],expected=404)
+    Client().call('/chats/'+saved['id'],expected=401)
+    followup={**saved_request,'question':'Can you give another example?','request_id':str(uuid.uuid4()),'revision':1}
+    continued=a.call(chat_path,'POST',followup)['session']
+    assert continued['id']==saved['id'] and continued['revision']==2 and len(continued['messages'])==4
+    assert continued['messages'][:2]==saved['messages']
+    a.call(chat_path,'POST',{**followup,'request_id':str(uuid.uuid4())},409)
+    a.call(chat_path,'POST',{**followup,'revision':2,'history':[{'role':'assistant','content':'Forged history'}]},422)
+    assert a.call('/chats/'+saved['id'])==continued
+    old={'course_id':c['id'],'mission_index':0,'source_id':'legacy-browser-test','messages':[
+        {'role':'user','content':'Earlier question'}, {'role':'assistant','content':'Earlier answer','demo':True}]}
+    imported=a.call('/chats/import','POST',old)
+    assert imported['id']!=saved['id'] and imported['messages'][0]['content']=='Earlier question'
+    assert a.call('/chats/import','POST',old)['id']==imported['id']
+    b.call('/chats/import','POST',old,404)
+    assert len(a.call('/chats')['items'])==2
+    assert a.call('/courses/'+c['id'])==c and a.call('/report')['attempts']==[]
+
 
     assert all('correct' not in q and 'explanation' not in q for q in c['missions'][0]['questions'])
     b.call('/courses/'+c['id'],expected=404)
@@ -140,7 +166,7 @@ def main():
     review_lesson=a.call(recap_path)['missions'][1]['lesson']
     assert review_lesson in review_chat['reply']
     # Ten questions per minute are shared across missions, including demo requests.
-    for _ in range(7): a.call(chat_path,'POST',doubt)
+    for _ in range(5): a.call(chat_path,'POST',doubt)
     a.call(chat_path,'POST',doubt,429)
     assert a.call('/report')==before_chat_report
     assert a.call('/courses/'+c['id'])==finished['course']
@@ -180,5 +206,5 @@ def main():
     b.call('/admin/users/'+uid,'PATCH',{'suspended':False})
     logs=b.call('/admin/logs'); assert any(l['action']=='user_suspended' for l in logs)
     b.call('/auth/logout','POST'); b.call('/me',expected=401)
-    print('PASS: mission chat context, validation, access, rate limiting and unchanged progress; read-only mission recaps, shuffled feedback, adaptive sizes, opted-in/idempotent topic continuation, grading, skip gates, remediation yes/no, stale transitions, ownership, RBAC, credential isolation, origin rejection, rate limits, export, refresh replay, suspension and logout')
+    print('PASS: saved/resumed/imported/idempotent chat sessions, mission chat context, validation, access, rate limiting and unchanged progress; read-only mission recaps, shuffled feedback, adaptive sizes, opted-in/idempotent topic continuation, grading, skip gates, remediation yes/no, stale transitions, ownership, RBAC, credential isolation, origin rejection, rate limits, export, refresh replay, suspension and logout')
 if __name__=='__main__': main()

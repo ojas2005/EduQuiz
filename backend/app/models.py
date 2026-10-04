@@ -55,6 +55,17 @@ class Attempt(Base):
     mission_index: Mapped[int]
     result: Mapped[dict] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+class TutorSession(Base):
+    __tablename__ = 'tutor_sessions'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
+    course_id: Mapped[str] = mapped_column(ForeignKey('courses.id'))
+    mission_index: Mapped[int]
+    messages: Mapped[list] = mapped_column(JSON, default=list)
+    revision: Mapped[int] = mapped_column(Integer, default=0)
+    last_request_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
 class Audit(Base):
     __tablename__ = 'audit_logs'
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)

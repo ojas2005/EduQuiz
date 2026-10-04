@@ -6,6 +6,7 @@ import type { Course, Credential, Page, Report, Result, Route, User } from './ty
 import { Alert, Brand, Button, Loading, Modal } from './components/UI';
 import { Landing } from './pages/Landing';
 import { Dashboard, Library } from './pages/Dashboard';
+import { MissionChat } from './components/MissionChat';
 import { MissionPage } from './pages/Mission';
 import { Reports } from './pages/Reports';
 import { SettingsPage } from './pages/Settings';
@@ -111,6 +112,7 @@ function App() {
       </main>
     </div>
   </div>}
+  {user && <MissionChat key={user.id} userId={user.id} courses={active ? [active, ...courses.filter(course => course.id !== active.id)] : courses} preferred={active ? { courseId: active.id, missionIndex: result?.mission_index ?? pending?.mission_index ?? Math.min(active.current, active.missions.length - 1) } : undefined}/>}
   {!user && error && !auth && <div className="public-error"><Alert error onDismiss={() => setError('')}>{error}</Alert></div>}
   {profile && user && <ProfileEditor user={user} busy={!!busy} onClose={() => { setProfile(false); setError(''); }} onSave={data => perform('Saving your profile…', async () => { const updated = await api<User>('/me', 'PUT', data); setUser(updated); })}/>}
   {auth && <Modal title={auth === 'signup' ? 'A good place to begin.' : 'Back to your learning desk.'} subtitle={auth === 'signup' ? 'Make an account. Bring your curiosity.' : 'Sign in to pick up where you left off.'} busy={!!busy} onClose={() => { setAuth(null); setIntendedTopic(null); setError(''); }}><form onSubmit={event => { event.preventDefault(); const values = Object.fromEntries(new FormData(event.currentTarget)); perform(auth === 'signup' ? 'Creating your account…' : 'Signing you in…', async () => { const data = await api<{ user: User; access_token: string }>('/auth/' + auth, 'POST', values); setToken(data.access_token); setUser(data.user); setAuth(null); if (intendedTopic) { setCreate({ practice: false, topic: intendedTopic }); setIntendedTopic(null); } if (route.page !== 'mission') navigate('overview'); }); }}>

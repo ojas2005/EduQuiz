@@ -76,6 +76,8 @@
 .chat-footnote a{text-decoration:underline;color:var(--ink)}
 @media(max-width:767px){.mission-chat-launcher{right:16px;bottom:16px;padding:13px 16px}.mission-chat-launcher span{font-size:12px}.chat-transcript{max-height:30dvh}.mission-chat .chat-context{font-size:11px}}
 
-.workspace-content:has(.mission-chat-launcher){padding-bottom:100px}
+.workspace-shell .workspace-content{padding-bottom:100px}
 
 .path-card-body h2,.featured-copy h2{overflow-wrap:anywhere}
+
+.chat-history-item{color:var(--ink)}.chat-history-item small{display:block;color:var(--muted);font-size:10px;margin-top:8px}.chat-header-actions{flex-wrap:wrap}.mission-chat-launcher{bottom:max(24px,env(safe-area-inset-bottom));z-index:45}
