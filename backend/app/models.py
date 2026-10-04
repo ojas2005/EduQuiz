@@ -41,6 +41,7 @@ class Course(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), index=True)
     topic: Mapped[str]
+    title: Mapped[str | None] = mapped_column(String(80), nullable=True)
     practice: Mapped[bool] = mapped_column(default=False)
     missions: Mapped[list] = mapped_column(JSON)
     current: Mapped[int] = mapped_column(Integer, default=0)

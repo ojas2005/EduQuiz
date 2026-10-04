@@ -41,6 +41,7 @@ class Mission(BaseModel):
             raise ValueError(f'{self.difficulty}/{self.importance} requires {expected} questions')
         return self
 class Curriculum(BaseModel):
+    title: str | None = Field(default=None, max_length=80, description='A concise 3–5 word summary of the entire learning path, not the original user prompt.')
     missions: list[Mission] = Field(min_length=1, max_length=8)
     next_topic: SuggestedTopic | None = None
 class GenerationState(TypedDict):
@@ -62,6 +63,8 @@ def build_graph(provider, model, api_key):
     async def generate(state):
         count = 'exactly 1' if state['focus'] or state['practice'] else 'between 2 and 8'
         messages = [('system', f"""You are an educational curriculum designer. Produce {count} missions (chapters).
+Give the entire path a title of exactly 3–5 words that summarizes its main learning goal.
+Do not copy the full input, list every subtopic, or use a mission number in the title.
 Choose chapter count based on scope, difficulty and importance: a narrow introductory topic needs 2-3,
 moderate scope 4-5, and broad or difficult foundational material 6-8. Do not pad a simple topic.
 Each mission needs a substantive lesson and 2-5 practical tasks. Classify its difficulty as

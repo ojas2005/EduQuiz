@@ -67,3 +67,10 @@ The final TypeScript/Vite production build passed. The redesigned admin interfac
 - Browser checks on the synthetic Mira account: floating icon opens chat for the current Paragraphs mission, suggested question fills the composer, sending receives explicitly labelled saved-lesson demo guidance, closing/reopening retains the conversation, and a selected quiz answer survives opening/closing chat. No assessment was submitted during browser checks.
 - Dark-mode desktop and 390 × 844 layouts visually inspected; the narrow dialog had no horizontal overflow. Temporary viewport reset and verification tab closed.
 - Real model calls were mocked in unit tests; no paid provider call or live answer-quality evaluation was performed. Provider failure and timeout responses use a generic retry message; conversation bodies are not stored in the application database/audit log. The user's model provider may have its own retention policy.
+
+
+## Short learning-path titles — 5 October 2026
+- Production build and 40 backend unit tests passed; full integration suite passed after API startup completed.
+- Added a nullable course title through the repeatable init-db upgrade. New paths save the generated title; existing paths use a bounded local fallback without changing their original topic.
+- Browser verification used an isolated legacy-style card containing the long System Design syllabus. Both dashboard and library displayed “System Design Foundations”; searching “Idempotency” still found the card through its original topic.
+- New path, practice and suggested-topic titles satisfy the 3–5 word contract, and remediation preserves the path title. No live-provider title-quality evaluation was performed.

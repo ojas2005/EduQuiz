@@ -35,7 +35,7 @@ function TopicComplete({ course, userId, onReview, onHome, onStartTopic, busy }:
   }
   return <section className="completion-panel">
     <span className="eyebrow">{course.practice ? 'PRACTICE COMPLETE' : 'TOPIC COMPLETE'}</span>
-    <h2>{course.practice ? 'Your practice is saved.' : `You’ve completed ${course.topic}.`}</h2>
+    <h2>{course.practice ? 'Your practice is saved.' : `You’ve completed ${course.title}.`}</h2>
     <p>Your results are saved. Take a break or choose what comes next.</p>
     <div className="button-row">
       <Button onClick={onHome} disabled={busy}><Home size={17} aria-hidden="true"/>Return to home</Button>
@@ -73,7 +73,7 @@ export function MissionPage({ course, userId, result, pending, busy, onSubmit, o
   const tasksDone = (mission?.tasks || []).every((_, index) => !!draft.tasks[index]);
   const answered = (mission?.questions || []).filter((_, index) => Number.isInteger(draft.answers[index])).length;
   const decisionPanel = course.pending_attempt && <div className="decision-panel"><span className="eyebrow">CHOOSE YOUR NEXT STEP</span><h3>Spend a little time on the tricky bits?</h3><p>We can add a focused mission for your weak skills before the next topic. It’s your call.</p><div className="button-row"><Button disabled={busy} onClick={() => onDecision(course.pending_attempt!, true)}>Work on these skills<ArrowRight size={17} aria-hidden="true"/></Button><Button disabled={busy} variant="secondary" onClick={() => onDecision(course.pending_attempt!, false)}>Continue to next topic</Button></div></div>;
-  return <><a className="back-link" href={course.practice ? '#practice' : '#learning'}><ArrowLeft size={16} aria-hidden="true"/>Back to {course.practice ? 'practice studio' : 'learning shelf'}</a><PageHeading eyebrow={course.practice ? `${course.topic} / PRACTICE` : `${course.topic} / LEARNING PATH`} title={assessment ? 'A useful moment to reflect.' : course.complete ? 'One more thing you know.' : mission.title}/>
+  return <><a className="back-link" href={course.practice ? '#practice' : '#learning'}><ArrowLeft size={16} aria-hidden="true"/>Back to {course.practice ? 'practice studio' : 'learning shelf'}</a><PageHeading eyebrow={course.practice ? `${course.title} / PRACTICE` : `${course.title} / LEARNING PATH`} title={assessment ? 'A useful moment to reflect.' : course.complete ? 'One more thing you know.' : mission.title}/>
     {assessment ? <ResultReview result={assessment} recap={{ courseId: course.id, missionIndex: assessment.mission_index }}>{!assessment.can_continue ? <div className="decision-panel"><h3>A little more practice before skipping.</h3><p>Skipping needs a score of at least 80%. Return to the lesson and try again when you’re ready.</p><Button onClick={() => { update({ quiz: false, skip: false, answers: {} }); onNext(); }}>Back to the lesson<ArrowRight size={17} aria-hidden="true"/></Button></div> : decisionPanel || !course.complete && <div className="result-actions"><Button onClick={onNext}>Open next mission<ArrowRight size={17} aria-hidden="true"/></Button></div>}</ResultReview>
       : course.pending_attempt ? <section className="panel">{decisionPanel}</section>
       : course.complete ? null

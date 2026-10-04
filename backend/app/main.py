@@ -14,6 +14,7 @@ from .models import User, UserProfile, Session, Credential, Course, Attempt, Aud
 from .security import (passwords, cipher, redis, digest, issue, public_user, current_user, admin, audit, rate_limit, require_origin, DUMMY_HASH)
 from .learning import build_graph, grade, demo_curriculum, demo_paragraphs, topic_suggestion
 from .tutor import answer_doubt
+from .titles import course_title
 
 app = FastAPI(title='EduQuiz API', version='0.1.0', docs_url='/api/docs', openapi_url='/api/openapi.json')
 class Input(BaseModel):
@@ -190,8 +191,8 @@ async def generate(db,user,topic,practice=False,focus=None):
                 while len(mission['questions'])<3: mission['questions']+=mission['questions'][:1]
                 # A focused demo reuses only matching questions; omit AI budget metadata.
                 mission.pop('difficulty', None); mission.pop('importance', None)
-                return [mission]
-            return missions[:1] if practice else missions
+                return {'missions':[mission], 'title':course_title(topic)}
+            return {'missions':missions[:1] if practice else missions, 'title':course_title(topic)}
         raise HTTPException(400,'Add your provider API key in Settings. Local demo supports “sentences” and “paragraphs”.')
     try:
         graph=build_graph(key.provider,key.model,cipher.decrypt(key.ciphertext.encode()).decode())
@@ -199,7 +200,7 @@ async def generate(db,user,topic,practice=False,focus=None):
         missions = result['curriculum']['missions']
         if not practice and not focus and result['curriculum'].get('next_topic'):
             missions[-1]['next_topic'] = result['curriculum']['next_topic']
-        return missions
+        return {'missions':missions, 'title':course_title(topic, result['curriculum'].get('title'))}
     except Exception:
         raise HTTPException(502,'Generation failed. Check your provider, model access, and quota, then retry.')
 
@@ -218,11 +219,11 @@ def public_course(c):
         if i==c.current:
             public.update({'lesson':m['lesson'],'tasks':m['tasks'],'questions':[{'prompt':q['prompt'],'options':q['options']} for q in m['questions']]})
         missions.append(public)
-    return {'id':c.id,'topic':c.topic,'practice':c.practice,'current':c.current,'missions':missions,'pending_attempt':c.pending_attempt,'complete':c.current>=len(c.missions), 'suggested_topic':topic_suggestion(c.topic, c.missions) if c.current>=len(c.missions) and not c.practice else None}
+    return {'id':c.id,'topic':c.topic,'title':course_title(c.topic,c.title),'practice':c.practice,'current':c.current,'missions':missions,'pending_attempt':c.pending_attempt,'complete':c.current>=len(c.missions), 'suggested_topic':topic_suggestion(c.topic, c.missions) if c.current>=len(c.missions) and not c.practice else None}
 @app.post('/api/courses')
 async def create_course(data:TopicInput,user=Depends(current_user),db:DB=Depends(db_session)):
-    missions=await generate(db,user,data.topic.strip(),data.practice)
-    course=Course(user_id=user.id,topic=data.topic.strip(),practice=data.practice,missions=missions)
+    plan=await generate(db,user,data.topic.strip(),data.practice)
+    course=Course(user_id=user.id,topic=data.topic.strip(),title=plan['title'],practice=data.practice,missions=plan['missions'])
     db.add(course); db.flush(); audit(db,user.id,'practice_created' if data.practice else 'course_created',course.id); db.commit()
     return public_course(course)
 @app.get('/api/courses')
@@ -289,7 +290,7 @@ async def decision(cid:str,data:Decision,user=Depends(current_user),db:DB=Depend
     c=owned_course(db,user,cid)
     if c.pending_attempt!=data.attempt_id: raise HTTPException(409,'This decision is no longer pending')
     attempt=db.get(Attempt,data.attempt_id)
-    remediation=await generate(db,user,c.topic,focus=attempt.result['weaknesses']) if data.remediate else []
+    remediation=(await generate(db,user,c.topic,focus=attempt.result['weaknesses']))['missions'] if data.remediate else []
     # Recheck under a row lock after the external call to avoid double insertion.
     db.expire(c)
     c=owned_course(db,user,cid,True)
@@ -307,14 +308,14 @@ async def continue_topic(cid:str,user=Depends(current_user),db:DB=Depends(db_ses
     if linked:
         return public_course(owned_course(db,user,linked))
     suggestion=topic_suggestion(source.topic, source.missions)
-    missions=await generate(db,user,suggestion['topic'])
+    plan=await generate(db,user,suggestion['topic'])
     db.expire(source)
     source=owned_course(db,user,cid,True)
     # A second tab can finish generation too; only one successor is persisted.
     linked=source.missions[0].get('next_course_id')
     if linked:
         return public_course(owned_course(db,user,linked))
-    next_course=Course(user_id=user.id,topic=suggestion['topic'],practice=False,missions=missions)
+    next_course=Course(user_id=user.id,topic=suggestion['topic'],title=plan['title'],practice=False,missions=plan['missions'])
     db.add(next_course); db.flush()
     source.missions=[{**source.missions[0], 'next_course_id':next_course.id}, *source.missions[1:]]
     audit(db,user.id,'suggested_topic_started',next_course.id); db.commit()

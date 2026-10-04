@@ -64,6 +64,7 @@ def main():
 
     c=a.call('/courses','POST',{'topic':'sentences','practice':False})
     assert len(c['missions'])==3
+    assert c['title']=='Building Clear Sentences' and c['topic']=='sentences'
     chat_path='/courses/'+c['id']+'/chat'
     doubt={'mission_index':0,'question':'Can you explain this lesson simply?','history':[]}
     b.call(chat_path,'POST',doubt,404)
@@ -116,6 +117,7 @@ def main():
     check_recap([0])
     c=a.call('/courses/'+c['id']+'/decision','POST',{'attempt_id':r['attempt_id'],'remediate':True})
     assert c['current']==1 and len(c['missions'])==4
+    assert c['title']=='Building Clear Sentences'
     check_recap([0])
     a.call('/courses/'+c['id']+'/decision','POST',{'attempt_id':r['attempt_id'],'remediate':True},409)
     # Decline a weak remediation and proceed to original mission two.
@@ -148,10 +150,12 @@ def main():
     assert len(a.call('/courses'))==1
     next_path=a.call('/courses/'+c['id']+'/continue','POST')
     assert next_path['topic']=='Paragraphs' and len(next_path['missions'])==2
+    assert next_path['title']=='Writing Focused Paragraphs'
     assert next_path['missions'][1]['question_count']==5
     again=a.call('/courses/'+c['id']+'/continue','POST')
     assert again['id']==next_path['id'] and len(a.call('/courses'))==2
     practice=a.call('/courses','POST',{'topic':'sentences','practice':True})
+    assert practice['title']=='Building Clear Sentences'
     result=a.call('/courses/'+practice['id']+'/submit','POST',{'mission_index':0,'answers':[0,1,2],'skip':False})
     assert result['course']['complete'] and not result['course']['pending_attempt']
     report=a.call('/report'); assert len(report['attempts'])==6

@@ -1,7 +1,7 @@
 export type User = { id: string; name: string; email: string; role: 'user' | 'admin'; suspended: boolean; bio: string; avatar: string };
 export type Question = { prompt: string; options: string[] };
 export type Mission = { title: string; objective: string; lesson?: string; tasks?: string[]; questions?: Question[]; difficulty?: string; importance?: string; question_count?: number };
-export type Course = { id: string; topic: string; practice: boolean; current: number; missions: Mission[]; pending_attempt: string | null; complete: boolean; suggested_topic?: { topic: string; reason: string } | null };
+export type Course = { id: string; topic: string; title: string; practice: boolean; current: number; missions: Mission[]; pending_attempt: string | null; complete: boolean; suggested_topic?: { topic: string; reason: string } | null };
 export type Feedback = { correct: boolean; explanation: string; answer: string };
 export type Assessment = { score: number; passed: boolean; strengths: string[]; weaknesses: string[]; can_continue: boolean; skip: boolean; feedback: Feedback[] };
 export type Attempt = Assessment & { id: string; course_id: string; mission_index: number; date: string };
