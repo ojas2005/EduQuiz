@@ -1,5 +1,5 @@
 import pytest
-from app.learning import grade, demo_curriculum, Curriculum
+from app.learning import grade, demo_curriculum, demo_paragraphs, demo_replacement_quiz, Curriculum
 
 def test_demo_validates():
     curriculum=Curriculum(missions=demo_curriculum())
@@ -36,19 +36,50 @@ def test_length_mismatch_is_not_silently_graded():
 def test_question_count_tracks_difficulty_and_importance(difficulty, importance, count):
     from app.learning import Mission
     data={**demo_curriculum()[0], 'difficulty':difficulty, 'importance':importance}
-    data['questions']=[data['questions'][0]]*count
+    originals=data['questions'][:2]
+    data['questions']=[{**originals[index%2], 'prompt': f"{originals[index%2]['prompt']} Example {index+1}."} for index in range(count)]
     assert len(Mission(**data).questions)==count
     data['questions']=data['questions'][:-1]
     with pytest.raises(ValueError): Mission(**data)
 
+def test_quiz_can_exceed_base_budget_to_cover_every_topic():
+    from app.learning import Mission
+    data={**demo_curriculum()[0]}
+    data['quiz_topics']=[f'Topic {index}' for index in range(5)]
+    data['questions']=[{**data['questions'][0], 'skill': topic, 'prompt': f"A learner applies {topic} in a new situation. Which choice fits?"} for topic in data['quiz_topics']]
+    assert len(Mission(**data).questions)==5
+    data['questions']=data['questions'][:-1]
+    with pytest.raises(ValueError, match='at least 5 questions'):
+        Mission(**data)
+    data['questions'].append(data['questions'][0])
+    with pytest.raises(ValueError, match='Every quiz topic'):
+        Mission(**data)
+
 
 def test_demos_have_variable_chapter_and_quiz_counts():
-    from app.learning import demo_paragraphs
     sentences=Curriculum(missions=demo_curriculum())
     paragraphs=Curriculum(missions=demo_paragraphs())
     assert len(sentences.missions)==3 and len(paragraphs.missions)==2
     assert [len(m.questions) for m in sentences.missions]==[3,4,6]
     assert [len(m.questions) for m in paragraphs.missions]==[3,5]
+
+@pytest.mark.parametrize('mission', demo_curriculum()+demo_paragraphs())
+def test_demo_retry_changes_prompts_and_keeps_coverage_and_explanations(mission):
+    fresh=demo_replacement_quiz(mission)
+    assert {q['prompt'] for q in fresh}.isdisjoint({q['prompt'] for q in mission['questions']})
+    assert set(mission['quiz_topics']) <= {q['skill'] for q in fresh}
+    assert all(len(q['option_explanations'])==4 for q in fresh)
+    next_set=demo_replacement_quiz({**mission,'questions':fresh,'quiz_revision':1})
+    assert {q['prompt'] for q in next_set}.isdisjoint({q['prompt'] for q in fresh})
+
+def test_feedback_explains_selected_wrong_option_and_correct_option():
+    question=demo_curriculum()[0]['questions'][0]
+    wrong=(question['correct']+1)%4
+    feedback=grade([question],[wrong])['feedback'][0]
+    assert feedback['prompt']==question['prompt']
+    assert feedback['selected_answer']==question['options'][wrong]
+    assert feedback['selected_explanation']==question['option_explanations'][wrong]
+    assert feedback['correct_explanation']==question['option_explanations'][question['correct']]
 
 
 def test_next_topic_uses_saved_suggestion_even_after_remediation():
