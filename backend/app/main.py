@@ -13,7 +13,7 @@ from .storage import blob_container
 from .config import settings
 from .models import User, UserProfile, Session, Credential, Course, Attempt, Audit, TutorSession, db_session, now
 from .security import (passwords, cipher, redis, digest, issue, public_user, current_user, admin, audit, rate_limit, require_origin, DUMMY_HASH)
-from .learning import build_graph, grade, demo_curriculum, demo_paragraphs, topic_suggestion
+from .learning import build_graph, generate_replacement_quiz, grade, demo_curriculum, demo_paragraphs, demo_replacement_quiz, topic_suggestion
 from .tutor import answer_doubt
 from .titles import course_title
 
@@ -44,10 +44,14 @@ class TopicInput(Input):
     practice: bool = False
 class Submission(Input):
     mission_index: int = Field(ge=0)
-    answers: list[int] = Field(min_length=3, max_length=8)
-    question_order: list[int] | None = Field(default=None, min_length=3, max_length=8)
+    quiz_revision: int = Field(ge=0)
+    answers: list[int] = Field(min_length=3, max_length=24)
+    question_order: list[int] | None = Field(default=None, min_length=3, max_length=24)
     skip: bool = False
     tasks_completed: bool = False
+class QuizRefresh(Input):
+    mission_index: int = Field(ge=0)
+    quiz_revision: int = Field(ge=0)
 class Decision(Input):
     attempt_id: str
     remediate: bool
@@ -208,6 +212,7 @@ async def generate(db,user,topic,practice=False,focus=None):
                 mission['tasks']=['Write an example for each focus skill: '+', '.join(focus), 'Explain how your examples demonstrate these focus skills.']
                 mission['questions']=[q for m in missions for q in m['questions'] if q['skill'] in focus][:8]
                 while len(mission['questions'])<3: mission['questions']+=mission['questions'][:1]
+                mission['quiz_topics'] = list(dict.fromkeys(q['skill'] for q in mission['questions']))
                 # A focused demo reuses only matching questions; omit AI budget metadata.
                 mission.pop('difficulty', None); mission.pop('importance', None)
                 return {'missions':[mission], 'title':course_title(topic)}
@@ -234,7 +239,9 @@ def public_course(c):
     # Answer keys/explanations never leave the server before submission.
     missions=[]
     for i,m in enumerate(c.missions):
-        public={'title':m['title'],'objective':m['objective'], 'difficulty':m.get('difficulty'), 'importance':m.get('importance'), 'question_count':len(m['questions'])}
+        public={'title':m['title'],'objective':m['objective'], 'difficulty':m.get('difficulty'), 'importance':m.get('importance'), 'question_count':len(m['questions']),
+                'quiz_topics':m.get('quiz_topics') or list(dict.fromkeys(q['skill'] for q in m['questions'])),
+                'quiz_revision':m.get('quiz_revision',0), 'quiz_ready':bool(m.get('quiz_topics')) and all(len(q.get('option_explanations',[]))==4 for q in m['questions'])}
         if i==c.current:
             public.update({'lesson':m['lesson'],'tasks':m['tasks'],'questions':[{'prompt':q['prompt'],'options':q['options']} for q in m['questions']]})
         missions.append(public)
@@ -367,12 +374,44 @@ async def mission_chat(cid:str,data:ChatInput,user=Depends(current_user),db:DB=D
         response['session']=public_chat(row,c)
     return response
 
+@app.post('/api/courses/{cid}/quiz/refresh', dependencies=[Depends(require_origin)])
+async def refresh_quiz(cid:str,data:QuizRefresh,user=Depends(current_user),db:DB=Depends(db_session)):
+    user_limit(user,'quiz_refresh:'+user.id,20,3600)
+    c=owned_course(db,user,cid)
+    if c.pending_attempt or c.current!=data.mission_index or c.current>=len(c.missions):
+        raise HTTPException(409,'Mission changed; reload your path')
+    mission=c.missions[c.current]
+    if mission.get('quiz_revision',0)!=data.quiz_revision:
+        raise HTTPException(409,'Quiz changed in another tab; reload your path')
+    key=db.get(Credential,user.id)
+    if key:
+        try:
+            questions=await asyncio.wait_for(generate_replacement_quiz(key.provider,key.model,cipher.decrypt(key.ciphertext.encode()).decode(),mission),timeout=90)
+        except Exception:
+            raise HTTPException(502,'Could not prepare a fresh quiz. Check your model connection and try again.')
+    elif settings.demo_mode and c.topic.lower() in ('sentences', 'paragraphs'):
+        questions=demo_replacement_quiz(mission)
+    else:
+        raise HTTPException(400,'Connect a model in Settings to refresh this quiz.')
+    db.expire(c)
+    c=owned_course(db,user,cid,True)
+    if c.pending_attempt or c.current!=data.mission_index or c.missions[c.current].get('quiz_revision',0)!=data.quiz_revision:
+        raise HTTPException(409,'Quiz changed in another tab; reload your path')
+    missions=list(c.missions)
+    missions[c.current]={**missions[c.current], 'questions':questions,
+                         'quiz_topics':missions[c.current].get('quiz_topics') or list(dict.fromkeys(q['skill'] for q in questions)),
+                         'quiz_revision':data.quiz_revision+1}
+    c.missions=missions
+    audit(db,user.id,'quiz_refreshed',c.id); db.commit()
+    return public_course(c)
+
 @app.post('/api/courses/{cid}/submit')
 def submit(cid:str,data:Submission,user=Depends(current_user),db:DB=Depends(db_session)):
     user_limit(user, 'quiz:'+user.id, 30)
     c=owned_course(db,user,cid,True)
     if c.pending_attempt: raise HTTPException(409,'Choose your next step before continuing')
     if c.current!=data.mission_index or c.current>=len(c.missions): raise HTTPException(409,'Mission changed; reload your path')
+    if c.missions[c.current].get('quiz_revision',0)!=data.quiz_revision: raise HTTPException(409,'Quiz changed; reopen the lesson for a fresh set')
     if not data.skip and not data.tasks_completed and not c.practice: raise HTTPException(400,'Complete the mission tasks first')
     questions=c.missions[c.current]['questions']
     if len(data.answers)!=len(questions) or any(a not in range(4) for a in data.answers): raise HTTPException(422,'Answer every question with a valid option')
