@@ -130,10 +130,17 @@ def main():
         assert a.call('/courses/'+c['id'])==before_course
         assert a.call('/report')==before_report
 
-    a.call('/courses/'+c['id']+'/submit','POST',{'mission_index':0,'answers':[0,1,2],'question_order':[0,0,2],'skip':True},422)
-    bad={'mission_index':0,'answers':[1,0,0],'question_order':[2,0,1],'skip':True,'tasks_completed':False}
+    b.call('/courses/'+c['id']+'/quiz/refresh','POST',{'mission_index':0,'quiz_revision':0},404)
+    refreshed_quiz=a.call('/courses/'+c['id']+'/quiz/refresh','POST',{'mission_index':0,'quiz_revision':0})
+    assert refreshed_quiz['missions'][0]['quiz_revision']==1
+    assert {q['prompt'] for q in refreshed_quiz['missions'][0]['questions']}.isdisjoint({q['prompt'] for q in c['missions'][0]['questions']})
+    assert refreshed_quiz['missions'][0]['quiz_ready']
+    a.call('/courses/'+c['id']+'/submit','POST',{'mission_index':0,'quiz_revision':0,'answers':[0,1,1],'skip':True},409)
+    a.call('/courses/'+c['id']+'/submit','POST',{'mission_index':0,'quiz_revision':1,'answers':[0,1,1],'question_order':[0,0,2],'skip':True},422)
+    bad={'mission_index':0,'quiz_revision':1,'answers':[1,0,0],'question_order':[2,0,1],'skip':True,'tasks_completed':False}
     r=a.call('/courses/'+c['id']+'/submit','POST',bad)
-    assert r['feedback'][0]['answer']=='I ran, and she walked.'
+    assert r['feedback'][0]['answer']=='The predicate'
+    assert r['feedback'][0]['selected_explanation']!=r['feedback'][0]['correct_explanation']
     assert r['score']==0 and r['course']['current']==0 and not r['can_continue']
     assert r['mission_index']==0
     check_recap([0])
@@ -148,15 +155,15 @@ def main():
     a.call('/courses/'+c['id']+'/decision','POST',{'attempt_id':r['attempt_id'],'remediate':True},409)
     # Decline a weak remediation and proceed to original mission two.
     questions=c['missions'][1]['questions']
-    r=a.call('/courses/'+c['id']+'/submit','POST',{'mission_index':1,'answers':[0]*len(questions),'skip':False,'tasks_completed':True})
+    r=a.call('/courses/'+c['id']+'/submit','POST',{'mission_index':1,'quiz_revision':0,'answers':[0]*len(questions),'skip':False,'tasks_completed':True})
     assert r['weaknesses']
     c=a.call('/courses/'+c['id']+'/decision','POST',{'attempt_id':r['attempt_id'],'remediate':False})
     assert c['current']==2 and c['missions'][2]['title']=='Complete thoughts'
     check_recap([0,1])
-    passed=a.call('/courses/'+c['id']+'/submit','POST',{'mission_index':2,'answers':[2,1,2,0],'skip':True,'tasks_completed':False})
+    passed=a.call('/courses/'+c['id']+'/submit','POST',{'mission_index':2,'quiz_revision':0,'answers':[0,1,2,3],'skip':True,'tasks_completed':False})
     assert passed['score']==100 and passed['course']['current']==3
-    a.call('/courses/'+c['id']+'/submit','POST',{'mission_index':2,'answers':[2,1,2,0],'skip':True},409)
-    finished=a.call('/courses/'+c['id']+'/submit','POST',{'mission_index':3,'answers':[3,1,2,0,1,2],'question_order':[5,3,1,4,2,0],'skip':True})
+    a.call('/courses/'+c['id']+'/submit','POST',{'mission_index':2,'quiz_revision':0,'answers':[0,1,2,3],'skip':True},409)
+    finished=a.call('/courses/'+c['id']+'/submit','POST',{'mission_index':3,'quiz_revision':0,'answers':[0,1,2,3,0,1],'question_order':[5,3,1,4,2,0],'skip':True})
     assert finished['score']==100 and finished['course']['complete']
     assert finished['mission_index']==3
     check_recap([0,1,2,3])
@@ -182,7 +189,7 @@ def main():
     assert again['id']==next_path['id'] and len(a.call('/courses'))==2
     practice=a.call('/courses','POST',{'topic':'sentences','practice':True})
     assert practice['title']=='Building Clear Sentences'
-    result=a.call('/courses/'+practice['id']+'/submit','POST',{'mission_index':0,'answers':[0,1,2],'skip':False})
+    result=a.call('/courses/'+practice['id']+'/submit','POST',{'mission_index':0,'quiz_revision':0,'answers':[0,1,1],'skip':False})
     assert result['course']['complete'] and not result['course']['pending_attempt']
     report=a.call('/report'); assert len(report['attempts'])==6
     assert [attempt['mission_index'] for attempt in report['attempts']]==[0,0,1,2,3,0]
