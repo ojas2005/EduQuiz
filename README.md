@@ -52,7 +52,7 @@ All four images are real captures of the local app on **27 September 2026**, usi
 | **Your learning desk** | Resume a path, see covered missions, average quiz score, recent attempts and assessed strengths. |
 | **Adaptive missions** | Generate a multi-mission path with lessons, practical checklists and multiple-choice quizzes. |
 | **Quiz feedback** | Receive a server-calculated score, skill-specific strengths/weaknesses, correct answers and explanations. |
-| **Fresh quiz order** | Returning from the lesson starts a shuffled quiz with cleared selections. Refreshing keeps the current order and answers. |
+| **Fresh scenario quiz** | Leaving an unfinished quiz and returning to its mission starts a new set of scenario questions with cleared selections. Every listed mission topic is covered, even when that needs more questions than the usual difficulty budget. Each result explains the chosen answer and the correct one. |
 | **Topic completion** | Review a suggested next topic, explicitly accept to start it, dismiss it, or return home. |
 | **Skip challenge** | Skip a mission only after passing its quiz with **at least 80%**. A failed skip returns you to the lesson. |
 | **Focused follow-up** | Accept a weakness-only mission before the next topic, or decline and continue. |
