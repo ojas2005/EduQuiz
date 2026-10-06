@@ -70,13 +70,24 @@ function App() {
     if (course.complete) navigate('growth', course.id); else navigate('mission', course.id);
   }
   async function logout() { await perform('Signing out…', async () => { await api('/auth/logout', 'POST'); clearSession(); navigate('overview'); }); }
-  async function submit(data: { mission_index: number; answers: number[]; question_order: number[]; skip: boolean; tasks_completed: boolean }) {
+  async function submit(data: { mission_index: number; quiz_revision: number; answers: number[]; question_order: number[]; skip: boolean; tasks_completed: boolean }) {
     if (!active) return false;
     const id = active.id;
     return perform('Checking your answers…', async () => {
       const value = await api<Result>(`/courses/${id}/submit`, 'POST', data);
       setResult(value); setActive(value.course); setRevision(value => value + 1); window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
     });
+  }
+  async function refreshQuiz(): Promise<Course | null> {
+    if (!active) return null;
+    let updated: Course | null = null;
+    const success = await perform('Preparing new questions…', async () => {
+      updated = await api<Course>(`/courses/${active.id}/quiz/refresh`, 'POST', {
+        mission_index: active.current, quiz_revision: active.missions[active.current].quiz_revision ?? 0,
+      });
+      setActive(updated);
+    });
+    return success ? updated : null;
   }
   async function decision(attemptId: string, remediate: boolean) {
     if (!active) return;
@@ -104,7 +115,7 @@ function App() {
         {dataLoading && !courses.length && ['overview', 'learning', 'practice', 'growth'].includes(route.page) ? <Loading/> : <>
           {route.page === 'overview' && <Dashboard user={user} courses={courses} report={report} credential={credential} open={openCourse} create={start} navigate={navigate}/>}
           {(route.page === 'learning' || route.page === 'practice') && <Library key={route.page} practice={route.page === 'practice'} courses={courses} open={openCourse} create={() => start(route.page === 'practice')}/>}
-          {route.page === 'mission' && (missionLoading ? <Loading label="Opening your mission…"/> : active ? <MissionPage key={active.id + ':' + active.current} course={active} userId={user.id} result={result} pending={pending} busy={!!busy} onSubmit={submit} onDecision={decision} onHome={() => navigate('overview')} onStartTopic={startSuggestedTopic} onReview={() => navigate('growth', active.id)} onNext={() => { setResult(null); window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' }); }}/> : <div className="panel"><h1>This mission isn’t available.</h1><p>Open a learning path to continue.</p><a className="text-link" href="#learning">Back to your learning shelf<ArrowRight size={16} aria-hidden="true"/></a></div>)}
+          {route.page === 'mission' && (missionLoading ? <Loading label="Opening your mission…"/> : active ? <MissionPage key={active.id + ':' + active.current} course={active} userId={user.id} result={result} pending={pending} busy={!!busy} onSubmit={submit} onRefreshQuiz={refreshQuiz} onDecision={decision} onHome={() => navigate('overview')} onStartTopic={startSuggestedTopic} onReview={() => navigate('growth', active.id)} onNext={() => { setResult(null); window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' }); }}/> : <div className="panel"><h1>This mission isn’t available.</h1><p>Open a learning path to continue.</p><a className="text-link" href="#learning">Back to your learning shelf<ArrowRight size={16} aria-hidden="true"/></a></div>)}
           {route.page === 'growth' && <Reports key={route.id || 'all'} selectedCourse={route.id} report={report} courses={courses} busy={!!busy} onPractice={() => start(true)} onExport={() => perform('Preparing your report…', async () => { const data = await api<Report>('/report/export', 'POST'); const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })); const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'eduquiz-report.json'; document.body.append(anchor); anchor.click(); anchor.remove(); window.setTimeout(() => URL.revokeObjectURL(url), 1000); setNotice('Your report has been downloaded and saved to private storage.'); })}/>}
           {route.page === 'settings' && <SettingsPage onEditProfile={() => setProfile(true)} user={user} credential={credential} busy={!!busy} onSave={data => perform('Saving your connection…', async () => { await api('/credential', 'PUT', data); setCredential({ ...credential, configured: true, provider: data.provider, model: data.model }); setNotice('Connection saved. Your next path will use this model.'); })} onDelete={() => perform('Removing your key…', async () => { await api('/credential', 'DELETE'); setCredential({ configured: false, demo_mode: credential.demo_mode }); setNotice('The stored key has been removed.'); })} onLogout={logout}/>}
           {route.page === 'admin' && (user.role === 'admin' ? <AdminPage/> : <Alert error>Only administrators can access this page.</Alert>)}
