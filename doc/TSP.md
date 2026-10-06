@@ -34,7 +34,8 @@ All routes are under `/api`. JSON request validation rejects unknown fields. Acc
 | POST | /courses | `{topic,practice}` → validated curriculum without correct answers |
 | GET | /courses | Up to 100 newest owned paths |
 | GET | /courses/{id} | Owned path, current mission only has lesson/questions |
-| POST | /courses/{id}/submit | `{mission_index,answers,skip,tasks_completed}` → score, skills, explanations, attempt_id, updated course |
+| POST | /courses/{id}/quiz/refresh | `{mission_index,quiz_revision}` → fresh scenario questions and updated quiz revision |
+| POST | /courses/{id}/submit | `{mission_index,quiz_revision,answers,skip,tasks_completed}` → score, skills, per-option explanations, attempt_id, updated course |
 | POST | /courses/{id}/decision | `{attempt_id,remediate}` → updated path |
 | GET | /report | Own chronological attempts + aggregated skill scores |
 | POST | /report/export | Archive private blob and return JSON attachment |
@@ -46,7 +47,7 @@ All routes are under `/api`. JSON request validation rejects unknown fields. Acc
 Status codes: 400 invalid workflow/configuration; 401 invalid/revoked authentication; 403 role/origin denied; 404 resource not owned/not found; 409 stale decision/mission or conflicting account; 422 invalid schema; 429 limit exceeded with Retry-After; 502 provider failure; 503 limiter/blob unavailable. Unexpected errors use a generic response to avoid leaking credentials.
 
 ## Assessment and progression algorithm
-1. Lock the owned course row. Reject a stale mission index, a completed path, or a pending decision.
+1. Lock the owned course row. Reject a stale mission or quiz revision, a completed path, or a pending decision.
 2. Require task self-attestation unless practice or skip mode.
 3. Validate answer count exactly equals question count; each answer is an integer option index 0–3.
 4. Compare against server-stored keys. Score = rounded correct/total × 100. Skill evidence is correct/total for questions tagged with each skill; strengths require at least 80%, others are weaknesses.
@@ -55,10 +56,10 @@ Status codes: 400 invalid workflow/configuration; 401 invalid/revoked authentica
 7. Accepting remediation generates exactly one focused mission; re-lock/recheck pending_attempt after generation and insert at current+1, then advance. Declining advances without insertion. Duplicate decisions cannot insert twice. LLM calls can still incur duplicate costs for concurrent requests; an idempotent job system is planned.
 8. Completing a remediation uses the same rules; learners may remediate again or opt out. Practice never schedules remediation.
 
-Current quizzes are fixed in the stored curriculum. Retry feedback can reveal answers, so repeated attempts are practice, not secure certification. Next release should generate/rotate independent question pools with attempt limits for any higher-stakes assessment.
+Returning from an unfinished quiz requests a replacement set for the active mission. The server validates that it covers every saved quiz topic, meets the minimum difficulty budget, and does not repeat the previous question prompts. It replaces the JSON snapshot under a row lock and increments `quiz_revision`; stale submissions fail with 409. The demo uses authored alternating scenario sets. A configured provider generates fresh scenarios for other topics, which consumes provider tokens. Retry feedback reveals answers, so repeated attempts remain practice rather than secure certification.
 
 ## AI orchestration
-Graph: START → generate_validated_curriculum → END. State: topic, focus skill list, practice flag and validated curriculum. A system instruction separates learner topic data from behavioral instructions; no tools, browser, shell or database access are granted to the model. Pydantic constrains lesson sizes, question counts, options and correct indexes. Normal paths require at least three missions; practice/remediation require exactly one. Provider adapters use one retry and a 60-second provider timeout; outer generation deadline is 90 seconds. Unsupported models, malformed output and refusals result in a safe 502 error, not persisted partial content.
+Graph: START → generate_validated_curriculum → END. State: topic, focus skill list, practice flag and validated curriculum. A system instruction separates learner topic data from behavioral instructions; no tools, browser, shell or database access are granted to the model. Pydantic constrains lesson sizes, question counts, topic coverage, option rationales and correct indexes. Normal paths require at least two missions; practice/remediation require exactly one. Provider adapters use one retry and a 60-second provider timeout; outer generation deadline is 90 seconds. Unsupported models, malformed output and refusals result in a safe 502 error, not persisted partial content.
 
 The adaptive progression policy is deterministic application code, not an LLM decision. PostgreSQL is the checkpoint between learner interactions; the LangGraph graph is not held open across the entire course. Long-running durable generation jobs, moderation, semantic curriculum checks, retrieval and quality evaluation are production follow-ups.
 
@@ -98,9 +99,9 @@ A generated full path contains 2–8 chapters selected by topic scope, difficult
 | Intermediate | 4 | 5 | 6 |
 | Advanced | 5 | 6 | 8 |
 
-Practice and remediation generation still contain exactly one mission. Existing saved curricula are not resized or regraded. Demo paths use fixed authored content with varying chapter/question counts. Their focused remediation reuses matching questions and does not label a model-selected difficulty.
+The table gives minimum question counts. Every assessable mission topic needs at least one question, even if the total exceeds the table value; the validated ceiling is 24. Practice and remediation generation still contain exactly one mission. Existing saved curricula are not regraded. Demo paths use authored scenario variants with varying chapter/question counts. Their focused remediation reuses matching skills and does not label a model-selected difficulty.
 
-`POST /api/courses/{id}/submit` accepts optional `question_order`, a permutation of every canonical question index. `answers` always stays in canonical order. Invalid permutations are rejected before grading; feedback is returned/stored in the displayed order. The frontend persists order with the draft, reshuffles on entering the quiz from the lesson, and clears old selections. Option ordering is unchanged.
+`POST /api/courses/{id}/submit` accepts `quiz_revision` and optional `question_order`, a permutation of every canonical question index. `answers` always stays in canonical order. Invalid permutations or stale revisions are rejected before grading; feedback is returned/stored in the displayed order. The frontend clears old selections and requests a new quiz on returning from the lesson. Feedback records the selected option, its specific rationale, the correct option and its rationale. Option ordering is unchanged.
 
 Completed non-practice course responses include `suggested_topic: {topic, reason}`. New AI curricula persist a model-suggested next topic; older paths use a deterministic fallback. Merely viewing or dismissing the suggestion makes no generation request. `POST /api/courses/{id}/continue` requires ownership and completion, and creates the successor only after explicit acceptance. Repeated calls return the linked successor; a row lock prevents duplicate successor records across racing requests, although simultaneous provider calls can still incur duplicate generation cost. The link and recommendation live in existing mission JSON so no schema migration is needed.
 
